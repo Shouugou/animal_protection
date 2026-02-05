@@ -1,9 +1,9 @@
 <template>
   <el-card>
     <div slot="header">动保课堂</div>
-    <el-table :data="list" style="width:100%">
+    <el-table :data="list" v-loading="loading" style="width:100%">
       <el-table-column prop="title" label="标题" />
-      <el-table-column prop="type" label="类型" width="120" />
+      <el-table-column prop="content_type" label="类型" width="120" />
       <el-table-column label="操作" width="120">
         <template slot-scope="scope">
           <el-button size="mini" @click="open(scope.row)">查看</el-button>
@@ -22,22 +22,37 @@
 </template>
 
 <script>
+import { listContent, getContent } from "@/api";
+
 export default {
   name: "Classroom",
   data() {
     return {
-      list: [
-        { id: 1, title: "如何科学救助流浪动物", type: "图文", body: "示例内容" },
-        { id: 2, title: "常见犬猫疾病预防", type: "视频", body: "示例内容" }
-      ],
+      list: [],
+      loading: false,
       show: false,
       current: {}
     };
   },
+  created() {
+    this.fetch();
+  },
   methods: {
-    open(row) {
-      this.current = row;
-      this.show = true;
+    async fetch() {
+      this.loading = true;
+      try {
+        const resp = await listContent();
+        if (resp.code === 0) this.list = resp.data || [];
+      } finally {
+        this.loading = false;
+      }
+    },
+    async open(row) {
+      const resp = await getContent(row.id);
+      if (resp.code === 0) {
+        this.current = resp.data || {};
+        this.show = true;
+      }
     }
   }
 };

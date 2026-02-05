@@ -42,18 +42,21 @@ public class LawController {
 
     @PostMapping("/evidence")
     public ApiResponse<?> evidence(@RequestBody LawEvidenceRequest request) {
-        return ApiResponse.ok(lawService.addEvidence(request, 1L));
+        Long userId = com.animalprotection.common.AuthContext.getUserId();
+        return ApiResponse.ok(lawService.addEvidence(request, userId));
     }
 
     @PostMapping("/workorders/{id}/result")
     public ApiResponse<?> result(@PathVariable Long id, @RequestBody LawResultRequest request) {
-        lawService.saveResult(id, request, 1L);
+        Long userId = com.animalprotection.common.AuthContext.getUserId();
+        lawService.saveResult(id, request, userId);
         return ApiResponse.ok(true);
     }
 
     @PostMapping("/workorders/{id}/archive")
     public ApiResponse<?> archive(@PathVariable Long id, @RequestBody LawArchiveRequest request) {
-        lawService.archive(id, request, 1L);
+        Long userId = com.animalprotection.common.AuthContext.getUserId();
+        lawService.archive(id, request, userId);
         return ApiResponse.ok(true);
     }
 

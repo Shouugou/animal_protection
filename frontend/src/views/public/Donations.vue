@@ -18,23 +18,39 @@
         <el-checkbox v-model="form.anonymous">匿名捐赠</el-checkbox>
       </el-form-item>
       <el-form-item>
-        <el-button type="primary" @click="donate">捐赠</el-button>
+        <el-button type="primary" :loading="loading" @click="donateSubmit">捐赠</el-button>
       </el-form-item>
     </el-form>
   </el-card>
 </template>
 
 <script>
+import { donate } from "@/api";
+
 export default {
   name: "Donations",
   data() {
     return {
-      form: { target_type: "EVENT", target_id: "", amount: "", anonymous: false }
+      form: { target_type: "EVENT", target_id: "", amount: "", anonymous: false },
+      loading: false
     };
   },
   methods: {
-    donate() {
-      this.$message.success("捐赠已提交（演示）");
+    async donateSubmit() {
+      this.loading = true;
+      try {
+        const resp = await donate({
+          targetType: this.form.target_type,
+          targetId: Number(this.form.target_id),
+          amount: Number(this.form.amount),
+          anonymous: this.form.anonymous
+        });
+        if (resp.code === 0) {
+          this.$message.success("捐赠已提交");
+        }
+      } finally {
+        this.loading = false;
+      }
     }
   }
 };

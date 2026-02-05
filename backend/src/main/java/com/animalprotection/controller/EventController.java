@@ -19,9 +19,14 @@ public class EventController {
 
     @PostMapping
     public ApiResponse<?> create(@RequestBody EventCreateRequest request) {
+        Long userId = com.animalprotection.common.AuthContext.getUserId();
+        if (userId == null) {
+            return ApiResponse.error("未登录");
+        }
         Long eventId = eventService.createEvent(request.getEventType(), request.getUrgency(), request.getDescription(),
-                request.getAddress(), request.getLatitude(), request.getLongitude(), 1L);
-        eventService.addTimeline(eventId, "上报", "事件已上报", 1L);
+                request.getAddress(), request.getLatitude(), request.getLongitude(), userId);
+        eventService.addTimeline(eventId, "上报", "事件已上报", userId);
+        eventService.saveAttachments("EVENT", eventId, request.getAttachments(), userId);
         return ApiResponse.ok(eventService.getEvent(eventId));
     }
 
@@ -39,7 +44,17 @@ public class EventController {
 
     @GetMapping("/{id}")
     public ApiResponse<?> detail(@PathVariable Long id) {
-        return ApiResponse.ok(eventService.getEvent(id));
+        java.util.Map<String, Object> data = eventService.getEvent(id);
+        java.util.List<java.util.Map<String, Object>> atts = eventService.attachments("EVENT", id);
+        java.util.List<String> urls = new java.util.ArrayList<>();
+        for (java.util.Map<String, Object> row : atts) {
+            Object url = row.get("file_url");
+            if (url != null) {
+                urls.add(url.toString());
+            }
+        }
+        data.put("attachments", urls);
+        return ApiResponse.ok(data);
     }
 
     @GetMapping("/{id}/timeline")
@@ -49,7 +64,9 @@ public class EventController {
 
     @PostMapping("/{id}/supplements")
     public ApiResponse<?> supplement(@PathVariable Long id, @RequestBody EventSupplementRequest request) {
-        eventService.addTimeline(id, "补充", request.getContent(), 1L);
+        Long userId = com.animalprotection.common.AuthContext.getUserId();
+        eventService.addTimeline(id, "补充", request.getContent(), userId);
+        eventService.saveAttachments("EVENT", id, request.getAttachments(), userId);
         return ApiResponse.ok(true);
     }
 
@@ -60,7 +77,18 @@ public class EventController {
 
     @PostMapping("/{id}/comments")
     public ApiResponse<?> postComment(@PathVariable Long id, @RequestBody CommentRequest request) {
-        eventService.addComment(id, 1L, request.getParentId(), request.getContent());
+        Long userId = com.animalprotection.common.AuthContext.getUserId();
+        eventService.addComment(id, userId, request.getParentId(), request.getContent());
+        return ApiResponse.ok(true);
+    }
+
+    @DeleteMapping("/{id}")
+    public ApiResponse<?> delete(@PathVariable Long id) {
+        Long userId = com.animalprotection.common.AuthContext.getUserId();
+        boolean deleted = eventService.deleteEvent(id, userId);
+        if (!deleted) {
+            return ApiResponse.error("无权限删除该事件");
+        }
         return ApiResponse.ok(true);
     }
 }

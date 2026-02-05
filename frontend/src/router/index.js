@@ -83,7 +83,16 @@ const defaultRouteByRole = {
 
 router.beforeEach((to, from, next) => {
   const isLogin = to.path === "/login";
-  const token = store.getters.token;
+  const token = store.getters.token || (() => {
+    try {
+      const raw = localStorage.getItem("ap_frontend_auth");
+      if (!raw) return "";
+      const parsed = JSON.parse(raw);
+      return parsed.token || "";
+    } catch (e) {
+      return "";
+    }
+  })();
 
   if (!token && !isLogin) {
     return next({ path: "/login" });

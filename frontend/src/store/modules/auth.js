@@ -24,6 +24,8 @@ const mutations = {
   }
 };
 
+import { login as loginApi } from "@/api";
+
 const actions = {
   loadFromStorage({ commit }) {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -35,17 +37,12 @@ const actions = {
       localStorage.removeItem(STORAGE_KEY);
     }
   },
-  loginMock({ commit }, { roleCode, name }) {
-    const payload = {
-      token: "mock-token",
-      profile: {
-        role_code: roleCode,
-        user_id: 1,
-        org_id: roleCode === "PUBLIC" ? null : 1001,
-        name: name || "演示用户"
-      },
-      permCodes: []
-    };
+  async login({ commit }, { phone, password }) {
+    const resp = await loginApi({ phone, password });
+    if (resp.code !== 0) {
+      throw new Error(resp.message || "登录失败");
+    }
+    const payload = resp.data;
     localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
     commit("SET_AUTH", payload);
   },

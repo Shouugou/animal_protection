@@ -15,7 +15,8 @@ public class PublicController {
 
     @GetMapping("/messages")
     public ApiResponse<?> messages() {
-        return ApiResponse.ok(publicService.messages(1L));
+        Long userId = com.animalprotection.common.AuthContext.getUserId();
+        return ApiResponse.ok(publicService.messages(userId));
     }
 
     @GetMapping("/tasks")
@@ -25,7 +26,8 @@ public class PublicController {
 
     @PostMapping("/tasks/{id}/claim")
     public ApiResponse<?> claim(@PathVariable Long id) {
-        return ApiResponse.ok(publicService.claimTask(id, 1L));
+        Long userId = com.animalprotection.common.AuthContext.getUserId();
+        return ApiResponse.ok(publicService.claimTask(id, userId));
     }
 
     @PostMapping("/task-claims/{id}/start")
@@ -46,12 +48,14 @@ public class PublicController {
 
     @PostMapping("/adoptions")
     public ApiResponse<?> adoptions(@RequestBody AdoptionRequest request) {
-        return ApiResponse.ok(publicService.createAdoption(request, 1L));
+        Long userId = com.animalprotection.common.AuthContext.getUserId();
+        return ApiResponse.ok(publicService.createAdoption(request, userId));
     }
 
     @GetMapping("/followups")
     public ApiResponse<?> followups() {
-        return ApiResponse.ok(publicService.followups(1L));
+        Long userId = com.animalprotection.common.AuthContext.getUserId();
+        return ApiResponse.ok(publicService.followups(userId));
     }
 
     @PostMapping("/followups")
@@ -61,7 +65,8 @@ public class PublicController {
 
     @PostMapping("/donations")
     public ApiResponse<?> donations(@RequestBody DonationRequest request) {
-        return ApiResponse.ok(publicService.donate(request, 1L));
+        Long userId = com.animalprotection.common.AuthContext.getUserId();
+        return ApiResponse.ok(publicService.donate(request, userId));
     }
 
     @GetMapping("/content")

@@ -1,10 +1,11 @@
 <template>
   <el-card>
     <div slot="header">回访管理</div>
-    <el-table :data="list" style="width:100%">
-      <el-table-column prop="animal" label="动物" />
-      <el-table-column prop="due" label="回访期限" width="160" />
-      <el-table-column prop="status" label="状态" width="120" />
+    <el-table :data="list" v-loading="loading" style="width:100%">
+      <el-table-column prop="id" label="ID" width="80" />
+      <el-table-column prop="adoption_id" label="领养ID" width="120" />
+      <el-table-column prop="due_at" label="回访期限" width="160" />
+      <el-table-column prop="submitted_at" label="提交时间" width="160" />
       <el-table-column label="操作" width="120">
         <template slot-scope="scope">
           <el-button size="mini" type="primary" @click="open(scope.row)">提交</el-button>
@@ -17,7 +18,7 @@
       <Uploader title="回访附件" @change="onFiles" />
       <span slot="footer">
         <el-button @click="show=false">取消</el-button>
-        <el-button type="primary" @click="submit">提交</el-button>
+        <el-button type="primary" :loading="saving" @click="submit">提交</el-button>
       </span>
     </el-dialog>
   </el-card>
@@ -25,28 +26,71 @@
 
 <script>
 import Uploader from "@/components/Uploader.vue";
+import { listFollowups, submitFollowup, uploadFile } from "@/api";
 
 export default {
   name: "Followups",
   components: { Uploader },
   data() {
     return {
-      list: [{ id: 1, animal: "小黄", due: "2026-03-05", status: "待提交" }],
+      list: [],
+      loading: false,
       show: false,
+      saving: false,
+      current: null,
       form: { answer: "" },
       files: []
     };
   },
+  created() {
+    this.fetch();
+  },
   methods: {
+    async fetch() {
+      this.loading = true;
+      try {
+        const resp = await listFollowups();
+        if (resp.code === 0) this.list = resp.data || [];
+      } finally {
+        this.loading = false;
+      }
+    },
     onFiles(files) {
       this.files = files;
     },
-    open() {
+    async uploadAll() {
+      const urls = [];
+      for (const f of this.files) {
+        const resp = await uploadFile(f);
+        if (resp.code === 0 && resp.data && resp.data.file_url) {
+          urls.push(resp.data.file_url);
+        }
+      }
+      return urls;
+    },
+    open(row) {
+      this.current = row;
       this.show = true;
     },
-    submit() {
-      this.$message.success("回访已提交（演示）");
-      this.show = false;
+    async submit() {
+      if (!this.current) return;
+      this.saving = true;
+      try {
+        const attachments = await this.uploadAll();
+        const resp = await submitFollowup({
+          adoptionId: this.current.adoption_id,
+          questionnaire: JSON.stringify({ answer: this.form.answer }),
+          dueAt: this.current.due_at,
+          attachments
+        });
+        if (resp.code === 0) {
+          this.$message.success("回访已提交");
+          this.show = false;
+          this.fetch();
+        }
+      } finally {
+        this.saving = false;
+      }
     }
   }
 };

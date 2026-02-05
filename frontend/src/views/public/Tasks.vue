@@ -3,7 +3,7 @@
     <div slot="header" class="section-title">
       <span>任务大厅</span>
     </div>
-    <el-table :data="list" style="width:100%">
+    <el-table :data="list" v-loading="loading" style="width:100%">
       <el-table-column prop="title" label="任务" />
       <el-table-column prop="task_type" label="类型" width="140" />
       <el-table-column prop="status" label="状态" width="120" />
@@ -17,16 +17,38 @@
 </template>
 
 <script>
+import { listTasks, claimTask } from "@/api";
+
 export default {
   name: "PublicTasks",
   data() {
     return {
-      list: [{ id: 1, title: "西城区巡护", task_type: "PATROL", status: "OPEN" }]
+      list: [],
+      loading: false
     };
   },
+  created() {
+    this.fetch();
+  },
   methods: {
-    claim(item) {
-      this.$router.push(`/public/patrol/submit/${item.id}`);
+    async fetch() {
+      this.loading = true;
+      try {
+        const resp = await listTasks();
+        if (resp.code === 0) {
+          this.list = resp.data || [];
+        }
+      } finally {
+        this.loading = false;
+      }
+    },
+    async claim(item) {
+      const resp = await claimTask(item.id);
+      if (resp.code === 0) {
+        const claimId = resp.data;
+        this.$message.success("认领成功");
+        this.$router.push(`/public/patrol/submit/${claimId}`);
+      }
     }
   }
 };

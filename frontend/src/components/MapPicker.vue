@@ -19,7 +19,6 @@
         </el-col>
       </el-row>
       <el-button type="primary" size="small" @click="locate">定位当前位置</el-button>
-      <el-button type="primary" size="small" @click="emitPick" style="margin-left:8px">确认位置</el-button>
     </el-form>
   </el-card>
 </template>
@@ -45,13 +44,13 @@ export default {
       map.enableScrollWheelZoom(true);
       this.geocoder = new window.BMap.Geocoder();
       map.addEventListener("click", (e) => {
-        this.setPoint(e.point);
+        this.setPoint(e.point, true);
       });
       this.map = map;
     }
   },
   methods: {
-    setPoint(point) {
+    setPoint(point, emit) {
       this.latitude = point.lat.toFixed(6);
       this.longitude = point.lng.toFixed(6);
       if (this.marker) {
@@ -62,7 +61,10 @@ export default {
       if (this.geocoder) {
         this.geocoder.getLocation(point, (rs) => {
           if (rs && rs.address) this.address = rs.address;
+          if (emit) this.emitPick();
         });
+      } else if (emit) {
+        this.emitPick();
       }
     },
     locate() {
@@ -72,7 +74,7 @@ export default {
         (r) => {
           if (geolocation.getStatus() === window.BMAP_STATUS_SUCCESS) {
             this.map.panTo(r.point);
-            this.setPoint(r.point);
+            this.setPoint(r.point, true);
           } else {
             this.$message.warning("定位失败，请手动选择位置");
           }

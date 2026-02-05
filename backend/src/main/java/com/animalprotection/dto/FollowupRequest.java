@@ -4,6 +4,7 @@ public class FollowupRequest {
     private Long adoptionId;
     private String questionnaire;
     private String dueAt;
+    private java.util.List<String> attachments;
 
     public Long getAdoptionId() {
         return adoptionId;
@@ -27,5 +28,13 @@ public class FollowupRequest {
 
     public void setDueAt(String dueAt) {
         this.dueAt = dueAt;
+    }
+
+    public java.util.List<String> getAttachments() {
+        return attachments;
+    }
+
+    public void setAttachments(java.util.List<String> attachments) {
+        this.attachments = attachments;
     }
 }

@@ -73,7 +73,7 @@ public class PublicService {
     }
 
     public List<Map<String, Object>> animals() {
-        return jdbcTemplate.queryForList("SELECT id, species, status FROM ap_animal WHERE deleted_at IS NULL ORDER BY created_at DESC");
+        return jdbcTemplate.queryForList("SELECT id, species, status FROM ap_animal WHERE deleted_at IS NULL AND status = 'READY_FOR_ADOPTION' ORDER BY created_at DESC");
     }
 
     public Long createAdoption(AdoptionRequest request, Long userId) {
@@ -90,7 +90,12 @@ public class PublicService {
     }
 
     public List<Map<String, Object>> followups(Long userId) {
-        return jdbcTemplate.queryForList("SELECT id, adoption_id, submitted_at, due_at FROM ap_follow_up ORDER BY submitted_at DESC");
+        return jdbcTemplate.queryForList(
+                "SELECT f.id, f.adoption_id, f.submitted_at, f.due_at " +
+                        "FROM ap_follow_up f JOIN ap_adoption a ON f.adoption_id = a.id " +
+                        "WHERE a.applicant_user_id = ? ORDER BY f.submitted_at DESC",
+                userId
+        );
     }
 
     public Long submitFollowup(FollowupRequest request) {
@@ -103,7 +108,9 @@ public class PublicService {
             ps.setString(3, request.getQuestionnaire());
             return ps;
         }, keyHolder);
-        return keyHolder.getKey().longValue();
+        Long id = keyHolder.getKey().longValue();
+        saveAttachments("FOLLOW_UP", id, request.getAttachments(), 1L);
+        return id;
     }
 
     public Long donate(DonationRequest request, Long userId) {
@@ -128,5 +135,15 @@ public class PublicService {
     public Map<String, Object> contentDetail(Long id) {
         List<Map<String, Object>> list = jdbcTemplate.queryForList("SELECT * FROM ap_content WHERE id = ?", id);
         return list.isEmpty() ? Collections.emptyMap() : list.get(0);
+    }
+
+    private void saveAttachments(String bizType, Long bizId, List<String> urls, Long uploaderUserId) {
+        if (urls == null || urls.isEmpty()) {
+            return;
+        }
+        for (String url : urls) {
+            jdbcTemplate.update("INSERT INTO ap_attachment (biz_type, biz_id, file_url, uploader_user_id, created_at) VALUES (?, ?, ?, ?, NOW(3))",
+                    bizType, bizId, url, uploaderUserId);
+        }
     }
 }

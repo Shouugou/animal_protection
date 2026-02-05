@@ -47,7 +47,8 @@ public class RescueController {
 
     @PostMapping("/medical-records")
     public ApiResponse<?> medicalRecords(@RequestBody MedicalRecordRequest request) {
-        return ApiResponse.ok(rescueService.addMedicalRecord(request, 1L));
+        Long userId = com.animalprotection.common.AuthContext.getUserId();
+        return ApiResponse.ok(rescueService.addMedicalRecord(request, userId));
     }
 
     @GetMapping("/inventory/items")
@@ -57,6 +58,7 @@ public class RescueController {
 
     @PostMapping("/inventory/txns")
     public ApiResponse<?> inventoryTxns(@RequestBody InventoryTxnRequest request) {
-        return ApiResponse.ok(rescueService.addInventoryTxn(request, 1L));
+        Long userId = com.animalprotection.common.AuthContext.getUserId();
+        return ApiResponse.ok(rescueService.addInventoryTxn(request, userId));
     }
 }

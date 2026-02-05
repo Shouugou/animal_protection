@@ -2,10 +2,10 @@
   <el-card>
     <div slot="header">{{ title }}</div>
     <el-upload
-      action="/api/upload"
+      action=""
       :file-list="fileList"
-      :auto-upload="false"
       multiple
+      :auto-upload="false"
       :on-change="onChange"
       :on-remove="onRemove"
     >

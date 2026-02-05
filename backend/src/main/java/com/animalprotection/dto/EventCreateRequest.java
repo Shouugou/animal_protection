@@ -7,6 +7,7 @@ public class EventCreateRequest {
     private String address;
     private String latitude;
     private String longitude;
+    private java.util.List<String> attachments;
 
     public String getEventType() {
         return eventType;
@@ -54,5 +55,13 @@ public class EventCreateRequest {
 
     public void setLongitude(String longitude) {
         this.longitude = longitude;
+    }
+
+    public java.util.List<String> getAttachments() {
+        return attachments;
+    }
+
+    public void setAttachments(java.util.List<String> attachments) {
+        this.attachments = attachments;
     }
 }
