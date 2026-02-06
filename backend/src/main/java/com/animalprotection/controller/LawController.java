@@ -19,8 +19,8 @@ public class LawController {
     }
 
     @GetMapping("/workorders")
-    public ApiResponse<?> list() {
-        return ApiResponse.ok(lawService.workOrders());
+    public ApiResponse<?> list(@RequestParam(required = false) String status) {
+        return ApiResponse.ok(lawService.workOrders(status));
     }
 
     @GetMapping("/workorders/{id}")
@@ -30,7 +30,8 @@ public class LawController {
 
     @PostMapping("/workorders/{id}/accept")
     public ApiResponse<?> accept(@PathVariable Long id, @RequestBody WorkOrderAcceptRequest request) {
-        lawService.accept(id, request);
+        Long userId = com.animalprotection.common.AuthContext.getUserId();
+        lawService.accept(id, request, userId);
         return ApiResponse.ok(true);
     }
 
@@ -64,5 +65,24 @@ public class LawController {
     public ApiResponse<?> transfer(@PathVariable Long id, @RequestParam(defaultValue = "0") Long rescueOrgId) {
         lawService.transferToRescue(id, rescueOrgId);
         return ApiResponse.ok(true);
+    }
+
+    @GetMapping("/assignees")
+    public ApiResponse<?> assignees() {
+        return ApiResponse.ok(lawService.availableAssignees());
+    }
+
+    @GetMapping("/my-workorders")
+    public ApiResponse<?> myWorkOrders(@RequestParam(required = false) String status) {
+        Long userId = com.animalprotection.common.AuthContext.getUserId();
+        if (userId == null) {
+            return ApiResponse.error("未登录");
+        }
+        return ApiResponse.ok(lawService.workOrdersByAssignee(userId, status));
+    }
+
+    @GetMapping("/archived-workorders")
+    public ApiResponse<?> archived(@RequestParam(required = false) String status) {
+        return ApiResponse.ok(lawService.archivedWorkOrders(status));
     }
 }

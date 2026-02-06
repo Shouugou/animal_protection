@@ -19,6 +19,8 @@ import Classroom from "@/views/public/Classroom.vue";
 
 import LawWorkOrders from "@/views/law/WorkOrders.vue";
 import LawWorkOrderDetail from "@/views/law/WorkOrderDetail.vue";
+import LawMyTasks from "@/views/law/MyTasks.vue";
+import LawArchives from "@/views/law/ArchivedCases.vue";
 
 import RescueTasks from "@/views/rescue/Tasks.vue";
 import RescueAnimals from "@/views/rescue/Animals.vue";
@@ -57,6 +59,8 @@ const router = new Router({
 
         { path: "law/workorders", component: LawWorkOrders, ...roleOnly("LAW") },
         { path: "law/workorders/:id", component: LawWorkOrderDetail, ...roleOnly("LAW") },
+        { path: "law/my-tasks", component: LawMyTasks, ...roleOnly("LAW") },
+        { path: "law/archives", component: LawArchives, ...roleOnly("LAW") },
 
         { path: "rescue/tasks", component: RescueTasks, ...roleOnly("RESCUE") },
         { path: "rescue/animals", component: RescueAnimals, ...roleOnly("RESCUE") },

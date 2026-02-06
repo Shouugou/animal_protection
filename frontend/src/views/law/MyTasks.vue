@@ -1,16 +1,11 @@
 <template>
   <div>
     <el-card>
-      <div slot="header">执法工单</div>
+      <div slot="header">我的任务</div>
       <el-tabs v-model="activeTab" @tab-click="onTabChange">
         <el-tab-pane label="全部" name="ALL" />
-        <el-tab-pane label="待受理" name="NEW" />
-        <el-tab-pane label="待分派" name="ACCEPTED" />
         <el-tab-pane label="待取证" name="ASSIGNED" />
         <el-tab-pane label="待录入结果" name="ON_SITE" />
-        <el-tab-pane label="待归档" name="FINISHED" />
-        <el-tab-pane label="已推送救助医疗机构" name="TRANSFERRED" />
-        <el-tab-pane label="不予受理" name="REJECTED" />
       </el-tabs>
       <el-table :data="list" style="width:100%" v-loading="loading">
         <el-table-column prop="id" label="ID" width="90" />
@@ -27,96 +22,25 @@
             <span style="white-space:nowrap">{{ formatTime(scope.row.reported_at) }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="执法人员" width="160">
-          <template slot-scope="scope">
-            {{ scope.row.assignee_name || "-" }}
-          </template>
-        </el-table-column>
-        <el-table-column prop="need_law_enforcement" label="是否执法">
-          <template slot-scope="scope">
-            {{ scope.row.need_law_enforcement ? "是" : "否" }}
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" width="220">
+        <el-table-column label="操作" width="200">
           <template slot-scope="scope">
             <el-button
-              v-if="nextAction(scope.row) === 'accept'"
-              type="primary"
-              size="mini"
-              @click="openAccept(scope.row)"
-            >受理</el-button>
-            <el-button
-              v-else-if="nextAction(scope.row) === 'assign'"
-              type="primary"
-              size="mini"
-              @click="openAssign(scope.row)"
-            >分派</el-button>
-            <el-button
-              v-else-if="nextAction(scope.row) === 'evidence'"
+              v-if="scope.row.status === 'ASSIGNED'"
               type="primary"
               size="mini"
               @click="openEvidence(scope.row)"
             >取证</el-button>
             <el-button
-              v-else-if="nextAction(scope.row) === 'result'"
+              v-else-if="scope.row.status === 'ON_SITE'"
               type="primary"
               size="mini"
               @click="openResult(scope.row)"
             >结果录入</el-button>
-            <el-button
-              v-else-if="nextAction(scope.row) === 'archive'"
-              type="primary"
-              size="mini"
-              @click="openArchive(scope.row)"
-            >归档</el-button>
             <el-link type="primary" @click="open(scope.row)" style="margin-left:8px">查看</el-link>
           </template>
         </el-table-column>
       </el-table>
     </el-card>
-
-    <el-dialog title="工单受理" :visible.sync="acceptDialog.visible" width="520px">
-      <el-form label-width="110px">
-        <el-form-item label="是否执法">
-          <el-select v-model="acceptDialog.form.need_law_enforcement">
-            <el-option label="是" :value="true" />
-            <el-option label="否" :value="false" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="是否转送救助">
-          <el-select v-model="acceptDialog.form.transfer_to_rescue">
-            <el-option label="是" :value="true" />
-            <el-option label="否" :value="false" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="处理结论">
-          <el-input type="textarea" v-model="acceptDialog.form.result_text" rows="3" />
-        </el-form-item>
-      </el-form>
-      <span slot="footer">
-        <el-button @click="acceptDialog.visible = false">取消</el-button>
-        <el-button type="primary" :loading="acceptDialog.loading" @click="submitAccept">提交</el-button>
-      </span>
-    </el-dialog>
-
-    <el-dialog title="工单分派" :visible.sync="assignDialog.visible" width="420px">
-      <el-form label-width="100px">
-        <el-form-item label="执法人员">
-          <el-select v-model="assignDialog.form.assignee_user_id" placeholder="选择执法人员">
-            <el-option
-              v-for="u in assignDialog.users"
-              :key="u.id"
-              :label="`${u.nickname || '执法人员'} (${u.phone})`"
-              :value="u.id"
-            />
-          </el-select>
-        </el-form-item>
-      </el-form>
-      <span slot="footer">
-        <el-button @click="assignDialog.visible = false">取消</el-button>
-        <el-button type="primary" :loading="assignDialog.loading" @click="submitAssign">提交</el-button>
-      </span>
-    </el-dialog>
 
     <el-dialog title="现场取证" :visible.sync="evidenceDialog.visible" width="560px">
       <el-form label-width="90px">
@@ -162,65 +86,28 @@
         <el-button type="primary" :loading="resultDialog.loading" @click="submitResult">提交</el-button>
       </span>
     </el-dialog>
-
-    <el-dialog title="归档" :visible.sync="archiveDialog.visible" width="420px">
-      <el-form label-width="90px">
-        <el-form-item label="归档编号">
-          <el-input v-model="archiveDialog.form.archive_no" />
-        </el-form-item>
-        <el-form-item label="归档摘要">
-          <el-input type="textarea" v-model="archiveDialog.form.summary" rows="3" />
-        </el-form-item>
-      </el-form>
-      <span slot="footer">
-        <el-button @click="archiveDialog.visible = false">取消</el-button>
-        <el-button type="primary" :loading="archiveDialog.loading" @click="submitArchive">提交</el-button>
-      </span>
-    </el-dialog>
   </div>
 </template>
 
 <script>
-import {
-  listWorkOrders,
-  acceptWorkOrder,
-  assignWorkOrder,
-  addLawEvidence,
-  saveLawResult,
-  archiveWorkOrder,
-  uploadFile,
-  listLawAssignees
-} from "@/api";
+import { listMyWorkOrders, addLawEvidence, saveLawResult, uploadFile } from "@/api";
 import Uploader from "@/components/Uploader.vue";
 import MapViewer from "@/components/MapViewer.vue";
 
 export default {
-  name: "LawWorkOrders",
+  name: "LawMyTasks",
   components: { Uploader, MapViewer },
   data() {
     return {
-      status: "",
       activeTab: "ALL",
+      status: "",
       list: [],
       loading: false,
-      acceptDialog: {
-        visible: false,
-        loading: false,
-        workOrderId: null,
-        form: { need_law_enforcement: true, transfer_to_rescue: false, result_text: "" }
-      },
-      assignDialog: {
-        visible: false,
-        loading: false,
-        workOrderId: null,
-        form: { assignee_user_id: "" },
-        users: []
-      },
       evidenceDialog: {
         visible: false,
         loading: false,
         workOrderId: null,
-        form: { note: "", address: "", latitude: "", longitude: "", attachments: [] },
+        form: { note: "", address: "", latitude: "", longitude: "" },
         files: []
       },
       resultDialog: {
@@ -228,12 +115,6 @@ export default {
         loading: false,
         workOrderId: null,
         form: { result_text: "", public_text: "" }
-      },
-      archiveDialog: {
-        visible: false,
-        loading: false,
-        workOrderId: null,
-        form: { archive_no: "", summary: "" }
       }
     };
   },
@@ -241,25 +122,13 @@ export default {
     this.fetch();
   },
   methods: {
-    nextAction(row) {
-      const status = row.status;
-      if (status === "NEW") return "accept";
-      if (status === "ACCEPTED") return "assign";
-      if (status === "ASSIGNED") return "";
-      if (status === "ON_SITE") return "result";
-      if (status === "FINISHED") return "archive";
-      return "";
-    },
     statusText(status) {
       const map = {
-        NEW: "待受理",
-        ACCEPTED: "已受理",
-        ASSIGNED: "已分派",
-        ON_SITE: "现场取证",
+        ASSIGNED: "待取证",
+        ON_SITE: "待录入结果",
         FINISHED: "已完成",
         TRANSFERRED: "已推送救助医疗机构",
-        ARCHIVED: "已归档",
-        REJECTED: "不予受理"
+        ARCHIVED: "已归档"
       };
       return map[status] || status || "未知";
     },
@@ -289,10 +158,14 @@ export default {
       const pad = (n) => String(n).padStart(2, "0");
       return `${d.getFullYear()}年${pad(d.getMonth() + 1)}月${pad(d.getDate())}日${pad(d.getHours())}时${pad(d.getMinutes())}分${pad(d.getSeconds())}秒`;
     },
+    onTabChange() {
+      this.status = this.activeTab === "ALL" ? "" : this.activeTab;
+      this.fetch();
+    },
     async fetch() {
       this.loading = true;
       try {
-        const resp = await listWorkOrders({ status: this.status });
+        const resp = await listMyWorkOrders({ status: this.status });
         if (resp.code === 0) {
           this.list = resp.data || [];
         }
@@ -300,70 +173,12 @@ export default {
         this.loading = false;
       }
     },
-    onTabChange() {
-      this.status = this.activeTab === "ALL" ? "" : this.activeTab;
-      this.fetch();
-    },
-    openAccept(row) {
-      this.acceptDialog.workOrderId = row.id;
-      this.acceptDialog.form = { need_law_enforcement: true, transfer_to_rescue: false, result_text: "" };
-      this.acceptDialog.visible = true;
-    },
-    async submitAccept() {
-      this.acceptDialog.loading = true;
-      try {
-        const resp = await acceptWorkOrder(this.acceptDialog.workOrderId, {
-          needLawEnforcement: this.acceptDialog.form.need_law_enforcement,
-          transferToRescue: this.acceptDialog.form.transfer_to_rescue,
-          resultText: this.acceptDialog.form.result_text
-        });
-        if (resp.code === 0) {
-          this.$message.success("已受理");
-          this.acceptDialog.visible = false;
-          this.fetch();
-        } else {
-          this.$message.error(resp.message || "受理失败");
-        }
-      } finally {
-        this.acceptDialog.loading = false;
-      }
-    },
-    openAssign(row) {
-      this.assignDialog.workOrderId = row.id;
-      this.assignDialog.form = { assignee_user_id: "" };
-      this.assignDialog.visible = true;
-      this.loadAssignees();
-    },
-    async loadAssignees() {
-      const resp = await listLawAssignees();
-      if (resp.code === 0) {
-        this.assignDialog.users = resp.data || [];
-      }
-    },
-    async submitAssign() {
-      if (!this.assignDialog.form.assignee_user_id) {
-        this.$message.warning("请输入执法人员ID");
-        return;
-      }
-      this.assignDialog.loading = true;
-      try {
-        const resp = await assignWorkOrder(this.assignDialog.workOrderId, {
-          assigneeUserId: Number(this.assignDialog.form.assignee_user_id)
-        });
-        if (resp.code === 0) {
-          this.$message.success("已分派");
-          this.assignDialog.visible = false;
-          this.fetch();
-        } else {
-          this.$message.error(resp.message || "分派失败");
-        }
-      } finally {
-        this.assignDialog.loading = false;
-      }
+    open(row) {
+      this.$router.push(`/law/workorders/${row.id}`);
     },
     openEvidence(row) {
       this.evidenceDialog.workOrderId = row.id;
-      this.evidenceDialog.form = { note: "", address: "", latitude: "", longitude: "", attachments: [] };
+      this.evidenceDialog.form = { note: "", address: "", latitude: "", longitude: "" };
       this.evidenceDialog.files = [];
       this.evidenceDialog.visible = true;
     },
@@ -454,36 +269,6 @@ export default {
       } finally {
         this.resultDialog.loading = false;
       }
-    },
-    openArchive(row) {
-      this.archiveDialog.workOrderId = row.id;
-      this.archiveDialog.form = { archive_no: "", summary: "" };
-      this.archiveDialog.visible = true;
-    },
-    async submitArchive() {
-      if (!this.archiveDialog.form.archive_no) {
-        this.$message.warning("请填写归档编号");
-        return;
-      }
-      this.archiveDialog.loading = true;
-      try {
-        const resp = await archiveWorkOrder(this.archiveDialog.workOrderId, {
-          archiveNo: this.archiveDialog.form.archive_no,
-          summary: this.archiveDialog.form.summary
-        });
-        if (resp.code === 0) {
-          this.$message.success("已归档");
-          this.archiveDialog.visible = false;
-          this.fetch();
-        } else {
-          this.$message.error(resp.message || "归档失败");
-        }
-      } finally {
-        this.archiveDialog.loading = false;
-      }
-    },
-    open(row) {
-      this.$router.push(`/law/workorders/${row.id}`);
     }
   }
 };

@@ -2,7 +2,7 @@
   <el-card>
     <div slot="header">事件位置</div>
     <div v-if="!hasPoint" style="color:#6b7280">无定位信息</div>
-    <div v-else class="map-container" ref="map"></div>
+    <div v-else class="map-container" ref="map" :style="{ height: height + 'px' }"></div>
   </el-card>
 </template>
 
@@ -11,7 +11,8 @@ export default {
   name: "MapViewer",
   props: {
     latitude: { type: [String, Number], default: "" },
-    longitude: { type: [String, Number], default: "" }
+    longitude: { type: [String, Number], default: "" },
+    height: { type: Number, default: 300 }
   },
   computed: {
     hasPoint() {

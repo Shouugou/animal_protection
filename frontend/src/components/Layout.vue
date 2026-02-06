@@ -56,7 +56,11 @@ export default {
           { label: "公益捐助", path: "/public/donations" },
           { label: "动保课堂", path: "/public/classroom" }
         ],
-        LAW: [{ label: "工单列表", path: "/law/workorders" }],
+        LAW: [
+          { label: "工单列表", path: "/law/workorders" },
+          { label: "我的任务", path: "/law/my-tasks" },
+          { label: "归档案件", path: "/law/archives" }
+        ],
         RESCUE: [
           { label: "救助任务", path: "/rescue/tasks" },
           { label: "动物档案", path: "/rescue/animals" },

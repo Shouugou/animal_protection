@@ -6,6 +6,7 @@ public class LawEvidenceRequest {
     private String address;
     private Double latitude;
     private Double longitude;
+    private java.util.List<String> attachments;
 
     public Long getWorkOrderId() {
         return workOrderId;
@@ -45,5 +46,13 @@ public class LawEvidenceRequest {
 
     public void setLongitude(Double longitude) {
         this.longitude = longitude;
+    }
+
+    public java.util.List<String> getAttachments() {
+        return attachments;
+    }
+
+    public void setAttachments(java.util.List<String> attachments) {
+        this.attachments = attachments;
     }
 }

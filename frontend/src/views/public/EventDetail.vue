@@ -10,7 +10,7 @@
         </div>
         <div style="display:flex;gap:8px">
           <el-button size="mini" @click="showSupplement = true">补充线索</el-button>
-          <el-button size="mini" type="danger" @click="removeEvent">删除事件</el-button>
+          <el-button v-if="canDelete" size="mini" type="danger" @click="removeEvent">删除事件</el-button>
         </div>
       </div>
       <el-row :gutter="16">
@@ -49,6 +49,26 @@
         <video
           v-for="(url, idx) in videoUrls"
           :key="`vid-${idx}`"
+          :src="url"
+          style="width:180px;height:120px"
+          controls
+        />
+      </div>
+    </el-card>
+
+    <el-card v-if="detail.evidence_attachments && detail.evidence_attachments.length > 0">
+      <div slot="header">执法取证附件</div>
+      <div style="display:flex;flex-wrap:wrap;gap:12px">
+        <el-image
+          v-for="(url, idx) in evidenceImageUrls"
+          :key="`eimg-${idx}`"
+          :src="url"
+          style="width:140px;height:100px"
+          fit="cover"
+        />
+        <video
+          v-for="(url, idx) in evidenceVideoUrls"
+          :key="`evid-${idx}`"
           :src="url"
           style="width:180px;height:120px"
           controls
@@ -121,11 +141,21 @@ export default {
   name: "PublicEventDetail",
   components: { TimelineList, Uploader, MapViewer },
   computed: {
+    canDelete() {
+      const s = this.detail.status;
+      return s === "REPORTED";
+    },
     imageUrls() {
       return (this.detail.attachments || []).filter((u) => !this.isVideo(u));
     },
     videoUrls() {
       return (this.detail.attachments || []).filter((u) => this.isVideo(u));
+    },
+    evidenceImageUrls() {
+      return (this.detail.evidence_attachments || []).filter((u) => !this.isVideo(u));
+    },
+    evidenceVideoUrls() {
+      return (this.detail.evidence_attachments || []).filter((u) => this.isVideo(u));
     }
   },
   data() {

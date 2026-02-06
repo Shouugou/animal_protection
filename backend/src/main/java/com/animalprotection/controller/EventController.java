@@ -54,6 +54,8 @@ public class EventController {
             }
         }
         data.put("attachments", urls);
+        java.util.List<String> evidenceUrls = eventService.evidenceAttachmentsByEvent(id);
+        data.put("evidence_attachments", evidenceUrls);
         return ApiResponse.ok(data);
     }
 

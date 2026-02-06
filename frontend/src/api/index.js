@@ -36,5 +36,13 @@ export const getContent = (id) => http.get(`/content/${id}`);
 
 export const listWorkOrders = (params) => http.get("/law/workorders", { params });
 export const getWorkOrder = (id) => http.get(`/law/workorders/${id}`);
+export const acceptWorkOrder = (id, payload) => http.post(`/law/workorders/${id}/accept`, payload);
+export const assignWorkOrder = (id, payload) => http.post(`/law/workorders/${id}/assign`, payload);
+export const addLawEvidence = (payload) => http.post("/law/evidence", payload);
+export const saveLawResult = (id, payload) => http.post(`/law/workorders/${id}/result`, payload);
+export const archiveWorkOrder = (id, payload) => http.post(`/law/workorders/${id}/archive`, payload);
+export const listLawAssignees = () => http.get("/law/assignees");
+export const listMyWorkOrders = (params) => http.get("/law/my-workorders", { params });
+export const listArchivedWorkOrders = (params) => http.get("/law/archived-workorders", { params });
 
 export const listRescueTasks = (params) => http.get("/rescue/tasks", { params });

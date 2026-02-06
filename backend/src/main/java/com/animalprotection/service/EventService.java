@@ -42,7 +42,30 @@ public class EventService {
             }
             return ps;
         }, keyHolder);
-        return keyHolder.getKey().longValue();
+        Long eventId = keyHolder.getKey().longValue();
+        Long lawOrgId = findDefaultLawOrgId();
+        if (lawOrgId != null) {
+            jdbcTemplate.update("INSERT INTO ap_work_order (event_id, law_org_id, status, need_law_enforcement, transfer_to_rescue, created_at, updated_at) " +
+                            "VALUES (?, ?, 'NEW', 1, 0, NOW(3), NOW(3))",
+                    eventId, lawOrgId);
+        }
+        return eventId;
+    }
+
+    private Long findDefaultLawOrgId() {
+        List<Map<String, Object>> list = jdbcTemplate.queryForList(
+                "SELECT id FROM ap_organization WHERE org_type = 'LAW' AND status = 1 AND deleted_at IS NULL ORDER BY id ASC LIMIT 1"
+        );
+        if (list.isEmpty()) {
+            String sql = "INSERT INTO ap_organization (org_type, name, status, created_at, updated_at) VALUES ('LAW', '默认执法部门', 1, NOW(3), NOW(3))";
+            org.springframework.jdbc.support.GeneratedKeyHolder keyHolder = new org.springframework.jdbc.support.GeneratedKeyHolder();
+            jdbcTemplate.update(con -> con.prepareStatement(sql, java.sql.Statement.RETURN_GENERATED_KEYS), keyHolder);
+            if (keyHolder.getKey() == null) {
+                return null;
+            }
+            return keyHolder.getKey().longValue();
+        }
+        return ((Number) list.get(0).get("id")).longValue();
     }
 
     public List<Map<String, Object>> listEvents(String status, String keyword, int offset, int limit) {
@@ -77,6 +100,27 @@ public class EventService {
                 "SELECT file_url FROM ap_attachment WHERE biz_type = ? AND biz_id = ? ORDER BY created_at ASC",
                 bizType, bizId
         );
+    }
+
+    public java.util.List<String> evidenceAttachmentsByEvent(Long eventId) {
+        List<Map<String, Object>> rows = jdbcTemplate.queryForList(
+                "SELECT a.file_url " +
+                        "FROM ap_attachment a " +
+                        "WHERE a.biz_type = 'LAW_EVIDENCE' AND a.biz_id IN (" +
+                        "  SELECT le.id FROM ap_law_evidence le WHERE le.work_order_id IN (" +
+                        "    SELECT wo.id FROM ap_work_order wo WHERE wo.event_id = ?" +
+                        "  )" +
+                        ") ORDER BY a.created_at ASC",
+                eventId
+        );
+        java.util.List<String> urls = new java.util.ArrayList<>();
+        for (Map<String, Object> row : rows) {
+            Object url = row.get("file_url");
+            if (url != null) {
+                urls.add(url.toString());
+            }
+        }
+        return urls;
     }
 
     public List<Map<String, Object>> timeline(Long eventId) {
@@ -124,11 +168,28 @@ public class EventService {
             }
         }
         List<Map<String, Object>> atts = attachments("EVENT", eventId);
+        List<Map<String, Object>> evidenceAtts = jdbcTemplate.queryForList(
+                "SELECT a.file_url FROM ap_attachment a WHERE a.biz_type = 'LAW_EVIDENCE' AND a.biz_id IN (" +
+                        "SELECT le.id FROM ap_law_evidence le WHERE le.work_order_id IN (" +
+                        "SELECT wo.id FROM ap_work_order wo WHERE wo.event_id = ?" +
+                        "))",
+                eventId
+        );
         jdbcTemplate.update("DELETE FROM ap_event_timeline WHERE event_id = ?", eventId);
         jdbcTemplate.update("DELETE FROM ap_comment WHERE event_id = ?", eventId);
         jdbcTemplate.update("DELETE FROM ap_attachment WHERE biz_type = 'EVENT' AND biz_id = ?", eventId);
+        jdbcTemplate.update("DELETE FROM ap_attachment WHERE biz_type = 'LAW_EVIDENCE' AND biz_id IN (" +
+                "SELECT le.id FROM ap_law_evidence le WHERE le.work_order_id IN (" +
+                "SELECT wo.id FROM ap_work_order wo WHERE wo.event_id = ?" +
+                "))", eventId);
+        jdbcTemplate.update("DELETE FROM ap_law_evidence WHERE work_order_id IN (SELECT id FROM ap_work_order WHERE event_id = ?)", eventId);
+        jdbcTemplate.update("DELETE FROM ap_law_result WHERE work_order_id IN (SELECT id FROM ap_work_order WHERE event_id = ?)", eventId);
+        jdbcTemplate.update("DELETE FROM ap_case_archive WHERE work_order_id IN (SELECT id FROM ap_work_order WHERE event_id = ?)", eventId);
+        jdbcTemplate.update("DELETE FROM ap_rescue_task WHERE event_id = ?", eventId);
+        jdbcTemplate.update("DELETE FROM ap_work_order WHERE event_id = ?", eventId);
         jdbcTemplate.update("DELETE FROM ap_event WHERE id = ?", eventId);
         deleteLocalFiles(atts);
+        deleteLocalFiles(evidenceAtts);
         return true;
     }
 
