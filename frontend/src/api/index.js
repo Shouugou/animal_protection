@@ -46,3 +46,18 @@ export const listMyWorkOrders = (params) => http.get("/law/my-workorders", { par
 export const listArchivedWorkOrders = (params) => http.get("/law/archived-workorders", { params });
 
 export const listRescueTasks = (params) => http.get("/rescue/tasks", { params });
+
+export const grabRescueTask = (id) => http.post(`/rescue/tasks/${id}/grab`);
+export const evaluateRescueTask = (id, payload) => http.post(`/rescue/tasks/${id}/evaluate`, payload);
+export const dispatchRescueTask = (id, payload) => http.post(`/rescue/tasks/${id}/dispatch`, payload);
+export const listRescueAnimals = () => http.get("/rescue/animals");
+export const createRescueAnimal = (payload) => http.post("/rescue/animals", payload);
+export const listMedicalRecords = (animalId) => http.get("/rescue/medical-records", { params: { animalId } });
+export const addMedicalRecord = (payload) => http.post("/rescue/medical-records", payload);
+export const shareMedicalRecord = (payload) => http.post("/rescue/medical-records/share", payload);
+export const listInventoryItems = () => http.get("/rescue/inventory/items");
+export const createInventoryItem = (payload) => http.post("/rescue/inventory/items", payload);
+export const addInventoryTxn = (payload) => http.post("/rescue/inventory/txns", payload);
+export const listInventoryTxns = (itemId) => http.get("/rescue/inventory/txns", { params: { itemId } });
+export const listInventoryAlerts = () => http.get("/rescue/inventory/alerts");
+export const deleteInventoryItem = (id) => http.delete(`/rescue/inventory/items/${id}`);

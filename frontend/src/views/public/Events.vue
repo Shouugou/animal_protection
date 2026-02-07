@@ -89,7 +89,7 @@ export default {
         PROCESSING: "处理中",
         PENDING_SUPPLEMENT: "待补充",
         RESOLVED: "已处置",
-        CLOSED: "已闭环",
+        CLOSED: "已办结",
         REJECTED: "不予受理",
         DUPLICATE: "重复事件"
       };

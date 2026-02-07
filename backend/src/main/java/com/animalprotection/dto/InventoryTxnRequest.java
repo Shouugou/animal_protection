@@ -3,11 +3,8 @@ package com.animalprotection.dto;
 public class InventoryTxnRequest {
     private Long orgId;
     private Long itemId;
-    private Long batchId;
     private String txnType;
     private Double qty;
-    private String refType;
-    private Long refId;
     private String note;
 
     public Long getOrgId() {
@@ -26,14 +23,6 @@ public class InventoryTxnRequest {
         this.itemId = itemId;
     }
 
-    public Long getBatchId() {
-        return batchId;
-    }
-
-    public void setBatchId(Long batchId) {
-        this.batchId = batchId;
-    }
-
     public String getTxnType() {
         return txnType;
     }
@@ -49,23 +38,6 @@ public class InventoryTxnRequest {
     public void setQty(Double qty) {
         this.qty = qty;
     }
-
-    public String getRefType() {
-        return refType;
-    }
-
-    public void setRefType(String refType) {
-        this.refType = refType;
-    }
-
-    public Long getRefId() {
-        return refId;
-    }
-
-    public void setRefId(Long refId) {
-        this.refId = refId;
-    }
-
     public String getNote() {
         return note;
     }

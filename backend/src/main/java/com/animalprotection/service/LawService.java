@@ -91,9 +91,8 @@ public class LawService {
         if (!needLaw && transfer) {
             jdbcTemplate.update("UPDATE ap_work_order SET need_law_enforcement = 0, transfer_to_rescue = 1, status = 'TRANSFERRED', updated_at = NOW(3) WHERE id = ?",
                     id);
-            Long rescueOrgId = findDefaultRescueOrgId();
-            jdbcTemplate.update("INSERT INTO ap_rescue_task (event_id, rescue_org_id, status, need_rescue, created_at, updated_at) VALUES ((SELECT event_id FROM ap_work_order WHERE id = ?), ?, 'NEW', 1, NOW(3), NOW(3))",
-                    id, rescueOrgId);
+            jdbcTemplate.update("INSERT INTO ap_rescue_task (event_id, rescue_org_id, status, need_rescue, created_at, updated_at) VALUES ((SELECT event_id FROM ap_work_order WHERE id = ?), NULL, 'NEW', 1, NOW(3), NOW(3))",
+                    id);
             jdbcTemplate.update("UPDATE ap_event SET status = 'DISPATCHED', updated_at = NOW(3) WHERE id = (SELECT event_id FROM ap_work_order WHERE id = ?)",
                     id);
             jdbcTemplate.update("INSERT INTO ap_event_timeline (event_id, node_type, content, operator_role, operator_user_id, created_at) " +
@@ -181,8 +180,7 @@ public class LawService {
                 workOrderId
         );
         if (transfer != null && transfer == 1) {
-            Long rescueOrgId = findDefaultRescueOrgId();
-            ensureRescueTask(workOrderId, rescueOrgId);
+            ensureRescueTask(workOrderId, null);
             jdbcTemplate.update("UPDATE ap_work_order SET status = 'TRANSFERRED', updated_at = NOW(3) WHERE id = ?", workOrderId);
             jdbcTemplate.update("UPDATE ap_event SET status = 'DISPATCHED', updated_at = NOW(3) WHERE id = (SELECT event_id FROM ap_work_order WHERE id = ?)",
                     workOrderId);
@@ -198,8 +196,8 @@ public class LawService {
 
     public void transferToRescue(Long workOrderId, Long rescueOrgId) {
         jdbcTemplate.update("UPDATE ap_work_order SET transfer_to_rescue = 1, updated_at = NOW(3) WHERE id = ?", workOrderId);
-        jdbcTemplate.update("INSERT INTO ap_rescue_task (event_id, rescue_org_id, status, need_rescue, created_at, updated_at) VALUES ((SELECT event_id FROM ap_work_order WHERE id = ?), ?, 'NEW', 1, NOW(3), NOW(3))",
-                workOrderId, rescueOrgId);
+        jdbcTemplate.update("INSERT INTO ap_rescue_task (event_id, rescue_org_id, status, need_rescue, created_at, updated_at) VALUES ((SELECT event_id FROM ap_work_order WHERE id = ?), NULL, 'NEW', 1, NOW(3), NOW(3))",
+                workOrderId);
     }
 
     public List<Map<String, Object>> availableAssignees() {
@@ -232,22 +230,6 @@ public class LawService {
         }
         Object phone = row.get("phone");
         return phone != null ? phone.toString() : null;
-    }
-
-    private Long findDefaultRescueOrgId() {
-        List<Map<String, Object>> list = jdbcTemplate.queryForList(
-                "SELECT id FROM ap_organization WHERE org_type = 'RESCUE' AND status = 1 AND deleted_at IS NULL ORDER BY id ASC LIMIT 1"
-        );
-        if (list.isEmpty()) {
-            String sql = "INSERT INTO ap_organization (org_type, name, status, created_at, updated_at) VALUES ('RESCUE', '默认救助机构', 1, NOW(3), NOW(3))";
-            org.springframework.jdbc.support.GeneratedKeyHolder keyHolder = new org.springframework.jdbc.support.GeneratedKeyHolder();
-            jdbcTemplate.update(con -> con.prepareStatement(sql, java.sql.Statement.RETURN_GENERATED_KEYS), keyHolder);
-            if (keyHolder.getKey() == null) {
-                return null;
-            }
-            return keyHolder.getKey().longValue();
-        }
-        return ((Number) list.get(0).get("id")).longValue();
     }
 
     private void ensureRescueTask(Long workOrderId, Long rescueOrgId) {

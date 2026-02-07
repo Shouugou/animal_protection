@@ -1,18 +1,50 @@
 <template>
   <el-card>
     <div slot="header">救助任务</div>
-    <el-table :data="list" style="width:100%">
+    <el-tabs v-model="activeTab" @tab-click="onTabChange">
+      <el-tab-pane label="全部" name="ALL" />
+      <el-tab-pane label="待接收" name="NEW" />
+      <el-tab-pane label="待评估" name="GRABBED" />
+      <el-tab-pane label="待调度" name="DISPATCHING" />
+      <el-tab-pane label="已到达" name="ARRIVED" />
+      <el-tab-pane label="已入站" name="INTAKE" />
+      <el-tab-pane label="不救助" name="REJECTED" />
+    </el-tabs>
+    <el-table :data="list" style="width:100%" v-loading="loading">
       <el-table-column prop="id" label="ID" width="90" />
-      <el-table-column prop="status" label="状态" width="120" />
-      <el-table-column prop="need_rescue" label="是否救助">
+      <el-table-column prop="event_id" label="事件ID" width="100" />
+      <el-table-column prop="event_type" label="事件类型" />
+      <el-table-column prop="address" label="地址" />
+      <el-table-column label="状态" width="140">
         <template slot-scope="scope">
-          {{ scope.row.need_rescue ? "是" : "否" }}
+          {{ statusText(scope.row.status) }}
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="160">
+      <el-table-column label="上报时间" width="220">
         <template slot-scope="scope">
-          <el-button size="mini" @click="evaluate(scope.row)">评估</el-button>
-          <el-button size="mini" type="primary" @click="dispatch(scope.row)">调度</el-button>
+          <span style="white-space:nowrap">{{ formatTime(scope.row.reported_at) }}</span>
+        </template>
+      </el-table-column>
+      <el-table-column label="操作" width="260">
+        <template slot-scope="scope">
+          <el-button
+            v-if="scope.row.status === 'NEW'"
+            size="mini"
+            type="primary"
+            @click="grab(scope.row)"
+          >接收</el-button>
+          <el-button
+            v-if="scope.row.status === 'GRABBED'"
+            size="mini"
+            @click="evaluate(scope.row)"
+          >评估</el-button>
+          <el-button
+            v-if="scope.row.status === 'DISPATCHING'"
+            size="mini"
+            type="primary"
+            @click="dispatch(scope.row)"
+          >调度</el-button>
+          <el-link type="primary" style="margin-left:8px" @click="openDetail(scope.row)">详情</el-link>
         </template>
       </el-table-column>
     </el-table>
@@ -31,7 +63,7 @@
       </el-form>
       <span slot="footer">
         <el-button @click="showEval=false">取消</el-button>
-        <el-button type="primary" @click="saveEval">保存</el-button>
+        <el-button type="primary" :loading="saving" @click="saveEval">保存</el-button>
       </span>
     </el-dialog>
 
@@ -52,38 +84,198 @@
       </el-form>
       <span slot="footer">
         <el-button @click="showDispatch=false">取消</el-button>
-        <el-button type="primary" @click="saveDispatch">保存</el-button>
+        <el-button type="primary" :loading="saving" @click="saveDispatch">保存</el-button>
       </span>
+    </el-dialog>
+
+    <el-dialog title="事件详情" :visible.sync="detailDialog.visible" width="860px">
+      <el-card v-if="detail.id" style="margin-bottom:12px">
+        <div slot="header">事件信息</div>
+        <el-descriptions :column="2">
+          <el-descriptions-item label="类型">{{ detail.event_type }}</el-descriptions-item>
+          <el-descriptions-item label="紧急程度">{{ detail.urgency || "-" }}</el-descriptions-item>
+          <el-descriptions-item label="地址">{{ detail.address || "未提供" }}</el-descriptions-item>
+          <el-descriptions-item label="上报时间">{{ formatTime(detail.reported_at) }}</el-descriptions-item>
+          <el-descriptions-item label="状态">{{ statusText(detail.status) }}</el-descriptions-item>
+        </el-descriptions>
+        <div style="margin-top:8px;line-height:1.6;color:#374151" v-if="detail.description">
+          {{ detail.description }}
+        </div>
+      </el-card>
+
+      <MapViewer :latitude="detail.latitude" :longitude="detail.longitude" :height="220" />
+
+      <el-card v-if="detail.attachments && detail.attachments.length > 0">
+        <div slot="header">事件附件</div>
+        <div style="display:flex;flex-wrap:wrap;gap:12px">
+          <el-image
+            v-for="(url, idx) in imageUrls"
+            :key="`img-${idx}`"
+            :src="url"
+            style="width:140px;height:100px"
+            fit="cover"
+          />
+          <video
+            v-for="(url, idx) in videoUrls"
+            :key="`vid-${idx}`"
+            :src="url"
+            style="width:180px;height:120px"
+            controls
+          />
+        </div>
+      </el-card>
     </el-dialog>
   </el-card>
 </template>
 
 <script>
+import { listRescueTasks, grabRescueTask, evaluateRescueTask, dispatchRescueTask, getEvent } from "@/api";
+import MapViewer from "@/components/MapViewer.vue";
+
 export default {
   name: "RescueTasks",
+  components: { MapViewer },
   data() {
     return {
-      list: [{ id: 5001, status: "NEW", need_rescue: true }],
+      list: [],
+      loading: false,
+      saving: false,
+      activeTab: "ALL",
       showEval: false,
       showDispatch: false,
+      currentId: null,
+      detailDialog: { visible: false },
+      detail: {},
       evalForm: { need_rescue: true, note: "" },
       dispatchForm: { note: "", start: "", arrive: "", intake: "" }
     };
   },
+  computed: {
+    imageUrls() {
+      return (this.detail.attachments || []).filter((u) => !this.isVideo(u));
+    },
+    videoUrls() {
+      return (this.detail.attachments || []).filter((u) => this.isVideo(u));
+    }
+  },
+  created() {
+    this.fetch();
+  },
   methods: {
-    evaluate() {
+    isVideo(url) {
+      return /\.(mp4|webm|ogg|mov)$/i.test(url || "");
+    },
+    statusText(status) {
+      const map = {
+        NEW: "待接收",
+        GRABBED: "待评估",
+        DISPATCHING: "待调度",
+        ARRIVED: "已到达",
+        INTAKE: "已入站",
+        TREATING: "治疗中",
+        CLOSED: "已闭环",
+        REJECTED: "不救助"
+      };
+      return map[status] || status || "未知";
+    },
+    formatTime(value) {
+      if (!value) return "";
+      let d = null;
+      if (typeof value === "number") {
+        d = new Date(value);
+      } else if (typeof value === "string") {
+        const match = value.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})/);
+        if (match) {
+          d = new Date(
+            Number(match[1]),
+            Number(match[2]) - 1,
+            Number(match[3]),
+            Number(match[4]),
+            Number(match[5]),
+            Number(match[6])
+          );
+        } else {
+          d = new Date(value);
+        }
+      } else if (value instanceof Date) {
+        d = value;
+      }
+      if (!d || Number.isNaN(d.getTime())) return "";
+      const pad = (n) => String(n).padStart(2, "0");
+      return `${d.getFullYear()}年${pad(d.getMonth() + 1)}月${pad(d.getDate())}日${pad(d.getHours())}时${pad(d.getMinutes())}分${pad(d.getSeconds())}秒`;
+    },
+    async fetch() {
+      this.loading = true;
+      try {
+        const status = this.activeTab === "ALL" ? "" : this.activeTab;
+        const resp = await listRescueTasks({ status });
+        if (resp.code === 0) {
+          this.list = resp.data || [];
+        }
+      } finally {
+        this.loading = false;
+      }
+    },
+    onTabChange() {
+      this.fetch();
+    },
+    async grab(row) {
+      const resp = await grabRescueTask(row.id);
+      if (resp.code === 0) {
+        this.$message.success("已接收任务");
+        this.fetch();
+      }
+    },
+    evaluate(row) {
+      this.currentId = row.id;
+      this.evalForm = { need_rescue: true, note: "" };
       this.showEval = true;
     },
-    dispatch() {
+    dispatch(row) {
+      this.currentId = row.id;
+      this.dispatchForm = { note: "", start: "", arrive: "", intake: "" };
       this.showDispatch = true;
     },
-    saveEval() {
-      this.$message.success("评估已保存（演示）");
-      this.showEval = false;
+    async saveEval() {
+      this.saving = true;
+      try {
+        const resp = await evaluateRescueTask(this.currentId, {
+          needRescue: this.evalForm.need_rescue,
+          note: this.evalForm.note
+        });
+        if (resp.code === 0) {
+          this.$message.success("评估已保存");
+          this.showEval = false;
+          this.fetch();
+        }
+      } finally {
+        this.saving = false;
+      }
     },
-    saveDispatch() {
-      this.$message.success("调度已保存（演示）");
-      this.showDispatch = false;
+    async saveDispatch() {
+      this.saving = true;
+      try {
+        const resp = await dispatchRescueTask(this.currentId, {
+          note: this.dispatchForm.note,
+          start: this.dispatchForm.start,
+          arrive: this.dispatchForm.arrive,
+          intake: this.dispatchForm.intake
+        });
+        if (resp.code === 0) {
+          this.$message.success("调度已保存");
+          this.showDispatch = false;
+          this.fetch();
+        }
+      } finally {
+        this.saving = false;
+      }
+    },
+    async openDetail(row) {
+      const resp = await getEvent(row.event_id);
+      if (resp.code === 0) {
+        this.detail = resp.data || {};
+        this.detailDialog.visible = true;
+      }
     }
   }
 };

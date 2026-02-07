@@ -328,7 +328,7 @@ CREATE TABLE IF NOT EXISTS `ap_case_archive` (
 CREATE TABLE IF NOT EXISTS `ap_rescue_task` (
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   `event_id` BIGINT UNSIGNED NOT NULL,
-  `rescue_org_id` BIGINT UNSIGNED NOT NULL,
+  `rescue_org_id` BIGINT UNSIGNED DEFAULT NULL COMMENT '接收后写入救助机构ID',
   `status` VARCHAR(24) NOT NULL COMMENT 'NEW/GRABBED/DISPATCHING/ARRIVED/INTAKE/TREATING/CLOSED/REJECTED',
   `need_rescue` TINYINT NOT NULL DEFAULT 1 COMMENT '评估是否救助（流程图判断）',
   `dispatch_note` TEXT DEFAULT NULL COMMENT '调度说明',
@@ -379,49 +379,36 @@ CREATE TABLE IF NOT EXISTS `ap_medical_record` (
 CREATE TABLE IF NOT EXISTS `ap_inventory_item` (
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   `org_id` BIGINT UNSIGNED NOT NULL,
-  `item_name` VARCHAR(128) NOT NULL,
-  `spec` VARCHAR(128) DEFAULT NULL,
-  `unit` VARCHAR(16) DEFAULT NULL,
-  `low_stock_threshold` DECIMAL(18,3) DEFAULT NULL COMMENT '低库存预警阈值',
+  `item_name` VARCHAR(128) NOT NULL COMMENT '品名/药品名称',
+  `production_date` DATE DEFAULT NULL COMMENT '生产日期',
+  `expiry_date` DATE DEFAULT NULL COMMENT '有效期',
+  `stock_qty` DECIMAL(18,3) NOT NULL DEFAULT 0 COMMENT '当前库存',
+  `low_stock_threshold` DECIMAL(18,3) DEFAULT NULL COMMENT '最低库存预警阈值',
+  `warning_days` INT DEFAULT NULL COMMENT '有效期预警天数',
   `status` TINYINT NOT NULL DEFAULT 1,
   `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   `updated_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
   `deleted_at` DATETIME(3) DEFAULT NULL,
   PRIMARY KEY (`id`),
-  KEY `idx_inv_item_org` (`org_id`, `item_name`)
+  KEY `idx_inv_item_org` (`org_id`, `item_name`),
+  KEY `idx_inv_item_expiry` (`expiry_date`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='库存物资/药品品项';
-
-CREATE TABLE IF NOT EXISTS `ap_inventory_batch` (
-  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-  `item_id` BIGINT UNSIGNED NOT NULL,
-  `batch_no` VARCHAR(64) DEFAULT NULL,
-  `expiry_date` DATE DEFAULT NULL,
-  `qty` DECIMAL(18,3) NOT NULL DEFAULT 0 COMMENT '当前库存数量（可用于统计与预警）',
-  `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-  `updated_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
-  PRIMARY KEY (`id`),
-  KEY `idx_inv_batch_item` (`item_id`),
-  KEY `idx_inv_batch_expiry` (`expiry_date`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='库存批次（过期预警）';
 
 CREATE TABLE IF NOT EXISTS `ap_inventory_txn` (
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `txn_no` VARCHAR(64) NOT NULL COMMENT '出入库单号',
   `org_id` BIGINT UNSIGNED NOT NULL,
   `item_id` BIGINT UNSIGNED NOT NULL,
-  `batch_id` BIGINT UNSIGNED DEFAULT NULL,
-  `txn_type` VARCHAR(16) NOT NULL COMMENT 'IN/OUT/ADJUST',
+  `txn_type` VARCHAR(16) NOT NULL COMMENT 'IN/OUT/ADJUST/LOSS/RETURN',
   `qty` DECIMAL(18,3) NOT NULL,
-  `ref_type` VARCHAR(32) DEFAULT NULL COMMENT '关联对象类型（RESCUE_TASK/ANIMAL等）',
-  `ref_id` BIGINT UNSIGNED DEFAULT NULL,
   `note` VARCHAR(255) DEFAULT NULL,
   `operator_user_id` BIGINT UNSIGNED DEFAULT NULL,
   `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   PRIMARY KEY (`id`),
   KEY `idx_inv_txn_org_time` (`org_id`, `created_at`),
   KEY `idx_inv_txn_item_time` (`item_id`, `created_at`),
-  KEY `idx_inv_txn_batch` (`batch_id`),
-  KEY `idx_inv_txn_operator` (`operator_user_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='库存流水';
+  KEY `idx_inv_txn_type` (`txn_type`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='库存流水（出入库/报损/退货）';
 
 -- =========================
 -- 5) 领养与回访
@@ -559,3 +546,34 @@ VALUES
   ('LAW', '执法部门', 1),
   ('RESCUE', '救助医疗机构', 1),
   ('ADMIN', '系统管理员', 1);
+
+-- =========================
+-- 9) 示例账号（救助医疗机构）
+-- =========================
+
+INSERT INTO ap_organization (org_type, name, region_code, address, contact_name, contact_phone, status, created_at, updated_at)
+SELECT 'RESCUE', '爱心救助站', '110101', '东城区爱心路1号', '张医生', '13800000031', 1, NOW(3), NOW(3)
+WHERE NOT EXISTS (SELECT 1 FROM ap_organization WHERE org_type = 'RESCUE' AND name = '爱心救助站');
+
+INSERT INTO ap_organization (org_type, name, region_code, address, contact_name, contact_phone, status, created_at, updated_at)
+SELECT 'RESCUE', '城市动物医院', '110102', '西城区健康街8号', '李主任', '13800000032', 1, NOW(3), NOW(3)
+WHERE NOT EXISTS (SELECT 1 FROM ap_organization WHERE org_type = 'RESCUE' AND name = '城市动物医院');
+
+INSERT INTO ap_organization (org_type, name, region_code, address, contact_name, contact_phone, status, created_at, updated_at)
+SELECT 'RESCUE', '护佑动物中心', '110105', '朝阳区公益路18号', '王老师', '13800000033', 1, NOW(3), NOW(3)
+WHERE NOT EXISTS (SELECT 1 FROM ap_organization WHERE org_type = 'RESCUE' AND name = '护佑动物中心');
+
+INSERT INTO ap_user (role_code, org_id, phone, password_hash, nickname, status, created_at, updated_at)
+SELECT 'RESCUE', o.id, '13800000031', '123456', '爱心救助站账号', 1, NOW(3), NOW(3)
+FROM ap_organization o WHERE o.org_type = 'RESCUE' AND o.name = '爱心救助站'
+AND NOT EXISTS (SELECT 1 FROM ap_user WHERE phone = '13800000031');
+
+INSERT INTO ap_user (role_code, org_id, phone, password_hash, nickname, status, created_at, updated_at)
+SELECT 'RESCUE', o.id, '13800000032', '123456', '城市动物医院账号', 1, NOW(3), NOW(3)
+FROM ap_organization o WHERE o.org_type = 'RESCUE' AND o.name = '城市动物医院'
+AND NOT EXISTS (SELECT 1 FROM ap_user WHERE phone = '13800000032');
+
+INSERT INTO ap_user (role_code, org_id, phone, password_hash, nickname, status, created_at, updated_at)
+SELECT 'RESCUE', o.id, '13800000033', '123456', '护佑动物中心账号', 1, NOW(3), NOW(3)
+FROM ap_organization o WHERE o.org_type = 'RESCUE' AND o.name = '护佑动物中心'
+AND NOT EXISTS (SELECT 1 FROM ap_user WHERE phone = '13800000033');
