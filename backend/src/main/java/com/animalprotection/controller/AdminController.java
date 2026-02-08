@@ -27,12 +27,13 @@ public class AdminController {
 
     @GetMapping("/dashboard/map")
     public ApiResponse<?> map() {
-        return ApiResponse.ok(Collections.emptyList());
+        return ApiResponse.ok(adminService.recentEvents());
     }
 
     @GetMapping("/reports")
-    public ApiResponse<?> reports() {
-        return ApiResponse.ok(adminService.reports());
+    public ApiResponse<?> reports(@RequestParam(required = false) String startDate,
+                                  @RequestParam(required = false) String endDate) {
+        return ApiResponse.ok(adminService.reports(startDate, endDate));
     }
 
     @GetMapping("/permissions")

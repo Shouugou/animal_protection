@@ -22,17 +22,85 @@ public class AdminService {
 
     public Map<String, Object> metrics() {
         Map<String, Object> data = new HashMap<>();
-        Long total = jdbcTemplate.queryForObject("SELECT COUNT(1) FROM ap_event", Long.class);
-        Long processing = jdbcTemplate.queryForObject("SELECT COUNT(1) FROM ap_event WHERE status = 'PROCESSING'", Long.class);
-        Long closed = jdbcTemplate.queryForObject("SELECT COUNT(1) FROM ap_event WHERE status = 'CLOSED'", Long.class);
+        Long total = jdbcTemplate.queryForObject("SELECT COUNT(1) FROM ap_event WHERE deleted_at IS NULL", Long.class);
+        Long today = jdbcTemplate.queryForObject(
+                "SELECT COUNT(1) FROM ap_event WHERE deleted_at IS NULL AND DATE(reported_at) = CURDATE()",
+                Long.class
+        );
+        Long processing = jdbcTemplate.queryForObject(
+                "SELECT COUNT(1) FROM ap_event WHERE deleted_at IS NULL AND status IN ('REPORTED','TRIAGED','DISPATCHED','PROCESSING','RESCUE_PROCESSING')",
+                Long.class
+        );
+        Long closed = jdbcTemplate.queryForObject(
+                "SELECT COUNT(1) FROM ap_event WHERE deleted_at IS NULL AND status = 'CLOSED'",
+                Long.class
+        );
         data.put("total", total);
+        data.put("today", today);
         data.put("processing", processing);
         data.put("closed", closed);
+        Double donationAmount = jdbcTemplate.queryForObject(
+                "SELECT IFNULL(SUM(amount),0) FROM ap_donation",
+                Double.class
+        );
+        data.put("donation_amount", donationAmount);
+        Long adoptionCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(1) FROM ap_adoption WHERE status = 'APPROVED'",
+                Long.class
+        );
+        data.put("adoption_count", adoptionCount);
         return data;
     }
 
-    public List<Map<String, Object>> reports() {
-        return jdbcTemplate.queryForList("SELECT event_type, COUNT(1) AS cnt FROM ap_event GROUP BY event_type");
+    public Map<String, Object> reports(String startDate, String endDate) {
+        String eventWhere = "WHERE deleted_at IS NULL ";
+        java.util.List<Object> args = new java.util.ArrayList<>();
+        if (startDate != null && !startDate.trim().isEmpty()) {
+            eventWhere += "AND reported_at >= ? ";
+            args.add(startDate + " 00:00:00");
+        }
+        if (endDate != null && !endDate.trim().isEmpty()) {
+            eventWhere += "AND reported_at <= ? ";
+            args.add(endDate + " 23:59:59");
+        }
+        Map<String, Object> result = new HashMap<>();
+        result.put("byType", jdbcTemplate.queryForList(
+                "SELECT event_type, COUNT(1) AS cnt FROM ap_event " + eventWhere + " GROUP BY event_type",
+                args.toArray()
+        ));
+        result.put("byStatus", jdbcTemplate.queryForList(
+                "SELECT status, COUNT(1) AS cnt FROM ap_event " + eventWhere + " GROUP BY status",
+                args.toArray()
+        ));
+        result.put("byDay", jdbcTemplate.queryForList(
+                "SELECT DATE(reported_at) AS day, COUNT(1) AS cnt FROM ap_event " + eventWhere + " GROUP BY DATE(reported_at) ORDER BY day",
+                args.toArray()
+        ));
+        String donationWhere = "WHERE 1=1 ";
+        java.util.List<Object> dArgs = new java.util.ArrayList<>();
+        if (startDate != null && !startDate.trim().isEmpty()) {
+            donationWhere += "AND donated_at >= ? ";
+            dArgs.add(startDate + " 00:00:00");
+        }
+        if (endDate != null && !endDate.trim().isEmpty()) {
+            donationWhere += "AND donated_at <= ? ";
+            dArgs.add(endDate + " 23:59:59");
+        }
+        result.put("donationByTarget", jdbcTemplate.queryForList(
+                "SELECT target_type, COUNT(1) AS cnt, IFNULL(SUM(amount),0) AS amount FROM ap_donation " + donationWhere + " GROUP BY target_type",
+                dArgs.toArray()
+        ));
+        result.put("adoptionByStatus", jdbcTemplate.queryForList(
+                "SELECT status, COUNT(1) AS cnt FROM ap_adoption GROUP BY status"
+        ));
+        return result;
+    }
+
+    public List<Map<String, Object>> recentEvents() {
+        return jdbcTemplate.queryForList(
+                "SELECT id, event_type, status, address, latitude, longitude, reported_at " +
+                        "FROM ap_event WHERE deleted_at IS NULL ORDER BY reported_at DESC LIMIT 20"
+        );
     }
 
     public List<Map<String, Object>> permissions() {

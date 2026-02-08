@@ -129,6 +129,9 @@ export const listAdminUsers = (params) => http.get("/admin/users", { params });
 export const createAdminUser = (payload) => http.post("/admin/users", payload);
 export const updateAdminUser = (id, payload) => http.put(`/admin/users/${id}`, payload);
 export const deleteAdminUser = (id) => http.delete(`/admin/users/${id}`);
+export const fetchDashboardMetrics = () => http.get("/admin/dashboard/metrics");
+export const fetchDashboardEvents = () => http.get("/admin/dashboard/map");
+export const fetchAdminReports = (params) => http.get("/admin/reports", { params });
 
 export const listApprovalFlows = () => http.get("/admin/approval-flows");
 export const saveApprovalFlow = (payload) => http.post("/admin/approval-flows", payload);
