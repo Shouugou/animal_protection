@@ -9,6 +9,8 @@ import com.animalprotection.dto.RescueDispatchRequest;
 import com.animalprotection.dto.RescueEvaluateRequest;
 import com.animalprotection.dto.RescueVehicleRequest;
 import com.animalprotection.dto.VolunteerTaskCreateRequest;
+import com.animalprotection.dto.ContentCreateRequest;
+import com.animalprotection.service.AdminService;
 import com.animalprotection.service.PublicService;
 import com.animalprotection.service.RescueService;
 import org.springframework.web.bind.annotation.*;
@@ -18,10 +20,12 @@ import org.springframework.web.bind.annotation.*;
 public class RescueController {
     private final RescueService rescueService;
     private final PublicService publicService;
+    private final AdminService adminService;
 
-    public RescueController(RescueService rescueService, PublicService publicService) {
+    public RescueController(RescueService rescueService, PublicService publicService, AdminService adminService) {
         this.rescueService = rescueService;
         this.publicService = publicService;
+        this.adminService = adminService;
     }
 
     @GetMapping("/tasks")
@@ -306,5 +310,45 @@ public class RescueController {
     public ApiResponse<?> followupDetail(@PathVariable Long id) {
         Long userId = com.animalprotection.common.AuthContext.getUserId();
         return ApiResponse.ok(rescueService.followupDetail(id, userId));
+    }
+
+    @GetMapping("/content")
+    public ApiResponse<?> myContent() {
+        Long userId = com.animalprotection.common.AuthContext.getUserId();
+        return ApiResponse.ok(publicService.myContent(userId));
+    }
+
+    @PostMapping("/content")
+    public ApiResponse<?> createContent(@RequestBody ContentCreateRequest request) {
+        Long userId = com.animalprotection.common.AuthContext.getUserId();
+        Long id = publicService.createContent(request, userId, "RESCUE");
+        if (id == null) {
+            return ApiResponse.error("内容发布失败");
+        }
+        return ApiResponse.ok(id);
+    }
+
+    @GetMapping("/content-approvals")
+    public ApiResponse<?> contentApprovals(@RequestParam(required = false) String status) {
+        Long userId = com.animalprotection.common.AuthContext.getUserId();
+        Long orgId = rescueService.findOrgIdPublic(userId);
+        return ApiResponse.ok(adminService.contentApprovalsByRole(status, "RESCUE", orgId));
+    }
+
+    @PostMapping("/content-approvals/{id}/approve")
+    public ApiResponse<?> approveContent(@PathVariable Long id) {
+        Long userId = com.animalprotection.common.AuthContext.getUserId();
+        Long orgId = rescueService.findOrgIdPublic(userId);
+        adminService.approveContentByRole(id, "RESCUE", orgId);
+        return ApiResponse.ok(true);
+    }
+
+    @PostMapping("/content-approvals/{id}/reject")
+    public ApiResponse<?> rejectContent(@PathVariable Long id, @RequestBody(required = false) java.util.Map<String, Object> body) {
+        Long userId = com.animalprotection.common.AuthContext.getUserId();
+        Long orgId = rescueService.findOrgIdPublic(userId);
+        String note = body == null ? null : (body.get("note") == null ? null : body.get("note").toString());
+        adminService.rejectContentByRole(id, "RESCUE", orgId, note);
+        return ApiResponse.ok(true);
     }
 }

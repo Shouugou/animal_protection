@@ -53,9 +53,17 @@ export const createAdoption = (payload) => http.post("/adoptions", payload);
 export const listFollowups = (params) => http.get("/followups", { params });
 export const submitFollowup = (payload) => http.post("/followups", payload);
 export const donate = (payload) => http.post("/donations", payload);
+export const listDonationEvents = () => http.get("/donation-targets/events");
+export const listDonationOrganizations = () => http.get("/donation-targets/orgs");
+export const listMyDonations = () => http.get("/donations/my");
+export const listOrgDonations = () => http.get("/donations/org");
 
 export const listContent = (params) => http.get("/content", { params });
 export const getContent = (id) => http.get(`/content/${id}`);
+export const listContentCategories = () => http.get("/content/categories");
+export const createPublicContent = (payload) => http.post("/content", payload);
+export const listMyContent = () => http.get("/content/my");
+export const deleteMyContent = (id) => http.delete(`/content/${id}`);
 
 export const listWorkOrders = (params) => http.get("/law/workorders", { params });
 export const getWorkOrder = (id) => http.get(`/law/workorders/${id}`);
@@ -121,3 +129,24 @@ export const listAdminUsers = (params) => http.get("/admin/users", { params });
 export const createAdminUser = (payload) => http.post("/admin/users", payload);
 export const updateAdminUser = (id, payload) => http.put(`/admin/users/${id}`, payload);
 export const deleteAdminUser = (id) => http.delete(`/admin/users/${id}`);
+
+export const listApprovalFlows = () => http.get("/admin/approval-flows");
+export const saveApprovalFlow = (payload) => http.post("/admin/approval-flows", payload);
+export const deleteApprovalFlow = (id) => http.delete(`/admin/approval-flows/${id}`);
+export const listContentCategoriesAdmin = () => http.get("/admin/content-categories");
+export const saveContentCategory = (payload) => http.post("/admin/content-categories", payload);
+export const deleteContentCategory = (id) => http.delete(`/admin/content-categories/${id}`);
+export const listContentApprovals = (params) => http.get("/admin/content-approvals", { params });
+export const approveContent = (id) => http.post(`/admin/content-approvals/${id}/approve`);
+export const rejectContent = (id, payload) => http.post(`/admin/content-approvals/${id}/reject`, payload);
+
+export const listLawContent = () => http.get("/law/content");
+export const createLawContent = (payload) => http.post("/law/content", payload);
+export const listRescueContent = () => http.get("/rescue/content");
+export const createRescueContent = (payload) => http.post("/rescue/content", payload);
+export const listLawContentApprovals = (params) => http.get("/law/content-approvals", { params });
+export const approveLawContent = (id) => http.post(`/law/content-approvals/${id}/approve`);
+export const rejectLawContent = (id, payload) => http.post(`/law/content-approvals/${id}/reject`, payload);
+export const listRescueContentApprovals = (params) => http.get("/rescue/content-approvals", { params });
+export const approveRescueContent = (id) => http.post(`/rescue/content-approvals/${id}/approve`);
+export const rejectRescueContent = (id, payload) => http.post(`/rescue/content-approvals/${id}/reject`, payload);

@@ -542,6 +542,10 @@ public class RescueService {
         return ensureDefault ? findDefaultRescueOrgId() : null;
     }
 
+    public Long findOrgIdPublic(Long userId) {
+        return findOrgId(userId, false);
+    }
+
     public List<Map<String, Object>> employees(Long userId) {
         Long orgId = findOrgId(userId, true);
         if (!isOrgAdmin(userId, "RESCUE")) {

@@ -171,16 +171,70 @@ public class PublicController {
     @PostMapping("/donations")
     public ApiResponse<?> donations(@RequestBody DonationRequest request) {
         Long userId = com.animalprotection.common.AuthContext.getUserId();
-        return ApiResponse.ok(publicService.donate(request, userId));
+        Long id = publicService.donate(request, userId);
+        if (id == null) {
+            return ApiResponse.error("捐赠目标不存在或参数错误");
+        }
+        return ApiResponse.ok(id);
+    }
+
+    @GetMapping("/donation-targets/events")
+    public ApiResponse<?> donationEvents() {
+        return ApiResponse.ok(publicService.donationEvents());
+    }
+
+    @GetMapping("/donation-targets/orgs")
+    public ApiResponse<?> donationOrganizations() {
+        return ApiResponse.ok(publicService.donationOrganizations());
+    }
+
+    @GetMapping("/donations/my")
+    public ApiResponse<?> myDonations() {
+        Long userId = com.animalprotection.common.AuthContext.getUserId();
+        return ApiResponse.ok(publicService.myDonations(userId));
+    }
+
+    @GetMapping("/donations/org")
+    public ApiResponse<?> orgDonations() {
+        Long userId = com.animalprotection.common.AuthContext.getUserId();
+        return ApiResponse.ok(publicService.orgDonations(userId));
+    }
+
+    @GetMapping("/content/categories")
+    public ApiResponse<?> contentCategories() {
+        return ApiResponse.ok(publicService.contentCategories());
     }
 
     @GetMapping("/content")
-    public ApiResponse<?> contentList() {
-        return ApiResponse.ok(publicService.contentList());
+    public ApiResponse<?> contentList(@RequestParam(required = false) Long categoryId) {
+        return ApiResponse.ok(publicService.contentList(categoryId));
     }
 
     @GetMapping("/content/{id}")
     public ApiResponse<?> contentDetail(@PathVariable Long id) {
         return ApiResponse.ok(publicService.contentDetail(id));
+    }
+
+    @GetMapping("/content/my")
+    public ApiResponse<?> myContent() {
+        Long userId = com.animalprotection.common.AuthContext.getUserId();
+        return ApiResponse.ok(publicService.myContent(userId));
+    }
+
+    @PostMapping("/content")
+    public ApiResponse<?> createContent(@RequestBody com.animalprotection.dto.ContentCreateRequest request) {
+        Long userId = com.animalprotection.common.AuthContext.getUserId();
+        Long id = publicService.createContent(request, userId, "PUBLIC");
+        if (id == null) {
+            return ApiResponse.error("该分类未配置审核流程或参数错误");
+        }
+        return ApiResponse.ok(id);
+    }
+
+    @DeleteMapping("/content/{id}")
+    public ApiResponse<?> deleteMyContent(@PathVariable Long id) {
+        Long userId = com.animalprotection.common.AuthContext.getUserId();
+        publicService.deleteMyContent(id, userId);
+        return ApiResponse.ok(true);
     }
 }

@@ -449,6 +449,10 @@ public class LawService {
         return null;
     }
 
+    public Long findOrgIdPublic(Long userId) {
+        return findOrgId(userId);
+    }
+
     public List<Map<String, Object>> patrolReports(Long userId, String status) {
         StringBuilder sql = new StringBuilder(
                 "SELECT c.id AS claim_id, c.status AS claim_status, c.claimed_at, c.finished_at, " +

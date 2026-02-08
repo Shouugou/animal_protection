@@ -7,7 +7,9 @@ import com.animalprotection.dto.LawResultRequest;
 import com.animalprotection.dto.VolunteerTaskCreateRequest;
 import com.animalprotection.dto.WorkOrderAcceptRequest;
 import com.animalprotection.dto.WorkOrderAssignRequest;
+import com.animalprotection.dto.ContentCreateRequest;
 import com.animalprotection.service.LawService;
+import com.animalprotection.service.AdminService;
 import com.animalprotection.service.PublicService;
 import org.springframework.web.bind.annotation.*;
 
@@ -16,10 +18,12 @@ import org.springframework.web.bind.annotation.*;
 public class LawController {
     private final LawService lawService;
     private final PublicService publicService;
+    private final AdminService adminService;
 
-    public LawController(LawService lawService, PublicService publicService) {
+    public LawController(LawService lawService, PublicService publicService, AdminService adminService) {
         this.lawService = lawService;
         this.publicService = publicService;
+        this.adminService = adminService;
     }
 
     @GetMapping("/workorders")
@@ -155,6 +159,46 @@ public class LawController {
     public ApiResponse<?> deleteEmployee(@PathVariable Long id) {
         Long userId = com.animalprotection.common.AuthContext.getUserId();
         lawService.deleteEmployee(id, userId);
+        return ApiResponse.ok(true);
+    }
+
+    @GetMapping("/content")
+    public ApiResponse<?> myContent() {
+        Long userId = com.animalprotection.common.AuthContext.getUserId();
+        return ApiResponse.ok(publicService.myContent(userId));
+    }
+
+    @PostMapping("/content")
+    public ApiResponse<?> createContent(@RequestBody ContentCreateRequest request) {
+        Long userId = com.animalprotection.common.AuthContext.getUserId();
+        Long id = publicService.createContent(request, userId, "LAW");
+        if (id == null) {
+            return ApiResponse.error("内容发布失败");
+        }
+        return ApiResponse.ok(id);
+    }
+
+    @GetMapping("/content-approvals")
+    public ApiResponse<?> contentApprovals(@RequestParam(required = false) String status) {
+        Long userId = com.animalprotection.common.AuthContext.getUserId();
+        Long orgId = lawService.findOrgIdPublic(userId);
+        return ApiResponse.ok(adminService.contentApprovalsByRole(status, "LAW", orgId));
+    }
+
+    @PostMapping("/content-approvals/{id}/approve")
+    public ApiResponse<?> approveContent(@PathVariable Long id) {
+        Long userId = com.animalprotection.common.AuthContext.getUserId();
+        Long orgId = lawService.findOrgIdPublic(userId);
+        adminService.approveContentByRole(id, "LAW", orgId);
+        return ApiResponse.ok(true);
+    }
+
+    @PostMapping("/content-approvals/{id}/reject")
+    public ApiResponse<?> rejectContent(@PathVariable Long id, @RequestBody(required = false) java.util.Map<String, Object> body) {
+        Long userId = com.animalprotection.common.AuthContext.getUserId();
+        Long orgId = lawService.findOrgIdPublic(userId);
+        String note = body == null ? null : (body.get("note") == null ? null : body.get("note").toString());
+        adminService.rejectContentByRole(id, "LAW", orgId, note);
         return ApiResponse.ok(true);
     }
 }

@@ -551,6 +551,35 @@ public class PublicService {
     }
 
     public Long donate(DonationRequest request, Long userId) {
+        if (request == null) {
+            return null;
+        }
+        String targetType = request.getTargetType();
+        Long targetId = request.getTargetId();
+        if (targetType == null || targetId == null) {
+            return null;
+        }
+        if ("EVENT".equalsIgnoreCase(targetType)) {
+            Integer count = jdbcTemplate.queryForObject(
+                    "SELECT COUNT(1) FROM ap_event WHERE id = ? AND deleted_at IS NULL",
+                    Integer.class,
+                    targetId
+            );
+            if (count == null || count == 0) {
+                return null;
+            }
+        } else if ("ORG".equalsIgnoreCase(targetType)) {
+            Integer count = jdbcTemplate.queryForObject(
+                    "SELECT COUNT(1) FROM ap_organization WHERE id = ? AND deleted_at IS NULL",
+                    Integer.class,
+                    targetId
+            );
+            if (count == null || count == 0) {
+                return null;
+            }
+        } else {
+            return null;
+        }
         String sql = "INSERT INTO ap_donation (donor_user_id, anonymous, target_type, target_id, amount, status, donated_at, created_at) VALUES (?, ?, ?, ?, ?, 'SUCCEEDED', NOW(3), NOW(3))";
         KeyHolder keyHolder = new GeneratedKeyHolder();
         jdbcTemplate.update(con -> {
@@ -565,13 +594,277 @@ public class PublicService {
         return keyHolder.getKey().longValue();
     }
 
-    public List<Map<String, Object>> contentList() {
-        return jdbcTemplate.queryForList("SELECT id, title, content_type, published_at FROM ap_content WHERE status = 'PUBLISHED' ORDER BY published_at DESC");
+    public List<Map<String, Object>> donationEvents() {
+        return jdbcTemplate.queryForList(
+                "SELECT id, event_type, address, status, reported_at FROM ap_event " +
+                        "WHERE deleted_at IS NULL ORDER BY reported_at DESC LIMIT 200"
+        );
+    }
+
+    public List<Map<String, Object>> donationOrganizations() {
+        return jdbcTemplate.queryForList(
+                "SELECT id, org_type, name, address FROM ap_organization " +
+                        "WHERE status = 1 AND deleted_at IS NULL ORDER BY org_type ASC, name ASC"
+        );
+    }
+
+    public List<Map<String, Object>> myDonations(Long userId) {
+        return jdbcTemplate.queryForList(
+                "SELECT d.id, d.target_type, d.target_id, d.amount, d.status, d.donated_at, d.anonymous, " +
+                        "e.event_type, e.address, o.name AS org_name, o.org_type " +
+                        "FROM ap_donation d " +
+                        "LEFT JOIN ap_event e ON d.target_type = 'EVENT' AND d.target_id = e.id " +
+                        "LEFT JOIN ap_organization o ON d.target_type = 'ORG' AND d.target_id = o.id " +
+                        "WHERE d.donor_user_id = ? ORDER BY d.donated_at DESC",
+                userId
+        );
+    }
+
+    public List<Map<String, Object>> orgDonations(Long userId) {
+        Long orgId = null;
+        String orgType = null;
+        List<Map<String, Object>> rows = jdbcTemplate.queryForList(
+                "SELECT u.org_id, o.org_type FROM ap_user u LEFT JOIN ap_organization o ON u.org_id = o.id WHERE u.id = ?",
+                userId
+        );
+        if (!rows.isEmpty()) {
+            Object v = rows.get(0).get("org_id");
+            if (v instanceof Number) {
+                orgId = ((Number) v).longValue();
+            }
+            Object t = rows.get(0).get("org_type");
+            if (t != null) {
+                orgType = t.toString();
+            }
+        }
+        if (orgId == null) {
+            return java.util.Collections.emptyList();
+        }
+        String baseSql = "SELECT d.id, d.target_type, d.target_id, d.amount, d.status, d.donated_at, d.anonymous, " +
+                "CASE WHEN d.anonymous = 1 THEN '匿名' ELSE COALESCE(u.nickname, u.phone) END AS donor_name, " +
+                "NULL AS event_type, NULL AS event_address, o.name AS org_name, o.org_type " +
+                "FROM ap_donation d " +
+                "LEFT JOIN ap_user u ON d.donor_user_id = u.id " +
+                "LEFT JOIN ap_organization o ON d.target_id = o.id " +
+                "WHERE d.target_type = 'ORG' AND d.target_id = ? ";
+        if (!"LAW".equalsIgnoreCase(orgType) && !"RESCUE".equalsIgnoreCase(orgType)) {
+            return jdbcTemplate.queryForList(baseSql + "ORDER BY d.donated_at DESC", orgId);
+        }
+        String eventJoin = "LAW".equalsIgnoreCase(orgType)
+                ? ("JOIN ap_work_order w ON w.event_id = d.target_id AND w.law_org_id = " + orgId)
+                : ("JOIN ap_rescue_task r ON r.event_id = d.target_id AND r.rescue_org_id = " + orgId);
+        String sql = baseSql +
+                "UNION ALL " +
+                "SELECT d.id, d.target_type, d.target_id, d.amount, d.status, d.donated_at, d.anonymous, " +
+                "CASE WHEN d.anonymous = 1 THEN '匿名' ELSE COALESCE(u.nickname, u.phone) END AS donor_name, " +
+                "e.event_type, e.address AS event_address, NULL AS org_name, NULL AS org_type " +
+                "FROM ap_donation d " +
+                "LEFT JOIN ap_user u ON d.donor_user_id = u.id " +
+                "JOIN ap_event e ON d.target_id = e.id " +
+                eventJoin + " " +
+                "WHERE d.target_type = 'EVENT' " +
+                "ORDER BY donated_at DESC";
+        return jdbcTemplate.queryForList(sql, orgId);
+    }
+
+    public List<Map<String, Object>> contentCategories() {
+        return jdbcTemplate.queryForList(
+                "SELECT id, name, sort_no FROM ap_content_category WHERE status = 1 ORDER BY sort_no ASC, id ASC"
+        );
+    }
+
+    public List<Map<String, Object>> contentList(Long categoryId) {
+        StringBuilder sql = new StringBuilder(
+                "SELECT c.id, c.title, c.content_type, c.cover_url, c.published_at, " +
+                        "cat.name AS category_name " +
+                        "FROM ap_content c " +
+                        "LEFT JOIN ap_content_category cat ON c.category_id = cat.id " +
+                        "WHERE c.status = 'PUBLISHED' "
+        );
+        java.util.List<Object> args = new java.util.ArrayList<>();
+        if (categoryId != null) {
+            sql.append("AND c.category_id = ? ");
+            args.add(categoryId);
+        }
+        sql.append("ORDER BY c.published_at DESC");
+        return jdbcTemplate.queryForList(sql.toString(), args.toArray());
     }
 
     public Map<String, Object> contentDetail(Long id) {
-        List<Map<String, Object>> list = jdbcTemplate.queryForList("SELECT * FROM ap_content WHERE id = ?", id);
+        List<Map<String, Object>> list = jdbcTemplate.queryForList(
+                "SELECT c.id, c.title, c.content_type, c.cover_url, c.video_url, c.body, c.status, c.published_at, " +
+                        "cat.name AS category_name " +
+                        "FROM ap_content c LEFT JOIN ap_content_category cat ON c.category_id = cat.id WHERE c.id = ?",
+                id
+        );
         return list.isEmpty() ? Collections.emptyMap() : list.get(0);
+    }
+
+    public List<Map<String, Object>> myContent(Long userId) {
+        return jdbcTemplate.queryForList(
+                "SELECT c.id, c.title, c.content_type, c.status, c.published_at, cat.name AS category_name, " +
+                        "i.status AS approval_status, i.current_step, f.steps " +
+                        "FROM ap_content c " +
+                        "LEFT JOIN ap_content_category cat ON c.category_id = cat.id " +
+                        "LEFT JOIN ap_approval_instance i ON i.biz_type = 'CONTENT' AND i.biz_id = c.id " +
+                        "LEFT JOIN ap_approval_flow f ON i.flow_id = f.id " +
+                        "WHERE c.author_user_id = ? ORDER BY c.created_at DESC",
+                userId
+        );
+    }
+
+    public void deleteMyContent(Long contentId, Long userId) {
+        jdbcTemplate.update(
+                "DELETE FROM ap_content WHERE id = ? AND author_user_id = ?",
+                contentId, userId
+        );
+        jdbcTemplate.update(
+                "DELETE FROM ap_approval_instance WHERE biz_type = 'CONTENT' AND biz_id = ?",
+                contentId
+        );
+    }
+
+    public Long createContent(ContentCreateRequest request, Long userId, String roleCode) {
+        if (request == null) {
+            return null;
+        }
+        if (request.getCategoryId() == null) {
+            return null;
+        }
+        String status = "PUBLISHED";
+        java.util.List<Map<String, Object>> catRows = jdbcTemplate.queryForList(
+                "SELECT approval_flow_id FROM ap_content_category WHERE id = ?",
+                request.getCategoryId()
+        );
+        Long approvalFlowId = null;
+        String approvalSteps = null;
+        if (!catRows.isEmpty()) {
+            Object flow = catRows.get(0).get("approval_flow_id");
+            if (flow instanceof Number) {
+                approvalFlowId = ((Number) flow).longValue();
+            }
+        }
+        if (approvalFlowId != null) {
+            List<Map<String, Object>> flowRows = jdbcTemplate.queryForList(
+                    "SELECT steps FROM ap_approval_flow WHERE id = ?",
+                    approvalFlowId
+            );
+            if (!flowRows.isEmpty()) {
+                Object steps = flowRows.get(0).get("steps");
+                if (steps != null) {
+                    approvalSteps = steps.toString();
+                }
+            }
+        }
+        if ("PUBLIC".equalsIgnoreCase(roleCode)) {
+            if (approvalFlowId == null) {
+                return null;
+            }
+            status = "PENDING";
+        }
+        Long targetOrgId = request.getTargetOrgId();
+        if (!"PUBLIC".equalsIgnoreCase(roleCode)) {
+            targetOrgId = findOrgId(userId);
+        }
+        if ("PUBLIC".equalsIgnoreCase(roleCode)) {
+            Long flowTarget = extractTargetOrgId(approvalSteps);
+            if (flowTarget != null) {
+                targetOrgId = flowTarget;
+            }
+        }
+        if ("PUBLIC".equalsIgnoreCase(roleCode) && targetOrgId == null && flowRequiresOrg(approvalSteps)) {
+            return null;
+        }
+        final String finalStatus = status;
+        final Long finalTargetOrgId = targetOrgId;
+        String sql = "INSERT INTO ap_content (content_type, category_id, title, body, video_url, cover_url, status, " +
+                "author_user_id, author_role, target_org_id, published_at, created_at, updated_at) " +
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(3), NOW(3))";
+        KeyHolder keyHolder = new GeneratedKeyHolder();
+        jdbcTemplate.update(con -> {
+            PreparedStatement ps = con.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS);
+            ps.setString(1, request.getContentType());
+            ps.setLong(2, request.getCategoryId());
+            ps.setString(3, request.getTitle());
+            ps.setString(4, request.getBody());
+            ps.setString(5, request.getVideoUrl());
+            ps.setString(6, request.getCoverUrl());
+            ps.setString(7, finalStatus);
+            ps.setLong(8, userId);
+            ps.setString(9, roleCode);
+            ps.setObject(10, finalTargetOrgId);
+            if ("PUBLISHED".equals(finalStatus)) {
+                ps.setTimestamp(11, new java.sql.Timestamp(System.currentTimeMillis()));
+            } else {
+                ps.setObject(11, null);
+            }
+            return ps;
+        }, keyHolder);
+        Long contentId = keyHolder.getKey().longValue();
+        if ("PUBLIC".equalsIgnoreCase(roleCode) && approvalFlowId != null) {
+            jdbcTemplate.update(
+                    "INSERT INTO ap_approval_instance (flow_id, biz_type, biz_id, status, current_step, created_at, updated_at) " +
+                            "VALUES (?, 'CONTENT', ?, 'PENDING', 1, NOW(3), NOW(3))",
+                    approvalFlowId, contentId
+            );
+        }
+        return contentId;
+    }
+
+    private Long findOrgId(Long userId) {
+        List<Map<String, Object>> rows = jdbcTemplate.queryForList("SELECT org_id FROM ap_user WHERE id = ?", userId);
+        if (!rows.isEmpty()) {
+            Object v = rows.get(0).get("org_id");
+            if (v instanceof Number) {
+                return ((Number) v).longValue();
+            }
+        }
+        return null;
+    }
+
+    private boolean flowRequiresOrg(String steps) {
+        if (steps == null || steps.trim().isEmpty()) {
+            return false;
+        }
+        try {
+            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            java.util.List<java.util.Map<String, Object>> list = mapper.readValue(steps, java.util.List.class);
+            for (java.util.Map<String, Object> s : list) {
+                Object role = s.get("role");
+                if (role == null) continue;
+                String r = role.toString();
+                if ("LAW".equalsIgnoreCase(r) || "RESCUE".equalsIgnoreCase(r)) {
+                    return true;
+                }
+            }
+        } catch (Exception e) {
+            return true;
+        }
+        return false;
+    }
+
+    private Long extractTargetOrgId(String steps) {
+        if (steps == null || steps.trim().isEmpty()) {
+            return null;
+        }
+        try {
+            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            java.util.List<java.util.Map<String, Object>> list = mapper.readValue(steps, java.util.List.class);
+            for (java.util.Map<String, Object> s : list) {
+                Object role = s.get("role");
+                if (role == null) continue;
+                String r = role.toString();
+                if ("LAW".equalsIgnoreCase(r) || "RESCUE".equalsIgnoreCase(r)) {
+                    Object orgId = s.get("orgId");
+                    if (orgId instanceof Number) {
+                        return ((Number) orgId).longValue();
+                    }
+                }
+            }
+        } catch (Exception e) {
+            return null;
+        }
+        return null;
     }
 
     private void saveAttachments(String bizType, Long bizId, List<String> urls, Long uploaderUserId) {

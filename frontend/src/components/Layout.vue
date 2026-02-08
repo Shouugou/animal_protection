@@ -15,8 +15,7 @@
           <el-tag size="mini" style="margin-left:8px">{{ userName }}</el-tag>
         </div>
         <div>
-          <el-link type="primary" @click="toMessages">消息中心</el-link>
-          <el-button size="mini" style="margin-left:12px" @click="logout">退出</el-button>
+          <el-button size="mini" @click="logout">退出</el-button>
         </div>
       </header>
       <div class="page">
@@ -48,7 +47,7 @@ export default {
       return this.$store.state.auth.profile.name || "用户";
     },
     menus() {
-      const common = [{ label: "消息中心", path: "/messages" }];
+      const common = [];
       const roleMenus = {
         PUBLIC: [
           { label: "事件列表", path: "/public/events" },
@@ -63,25 +62,30 @@ export default {
         LAW: [
           { label: "工单列表", path: "/law/workorders" },
           { label: "我的任务", path: "/law/my-tasks" },
+          { label: "课堂内容", path: "/law/classroom" },
+          { label: "内容审核", path: "/law/content-approvals" },
           { label: "志愿任务", path: "/law/volunteer-tasks" },
           { label: "归档案件", path: "/law/archives" },
+          { label: "捐赠记录", path: "/law/donations" },
           ...(this.isOrgAdmin ? [{ label: "员工管理", path: "/law/employees" }] : [])
         ],
         RESCUE: [
           { label: "救助任务", path: "/rescue/tasks" },
+          { label: "课堂内容", path: "/rescue/classroom" },
+          { label: "内容审核", path: "/rescue/content-approvals" },
           { label: "志愿任务", path: "/rescue/volunteer-tasks" },
           { label: "车辆管理", path: "/rescue/vehicles" },
           { label: "动物档案", path: "/rescue/animals" },
           { label: "治疗记录", path: "/rescue/medical-records" },
           { label: "动物领养", path: "/rescue/adoption" },
           { label: "共享病例", path: "/rescue/shared-cases" },
+          { label: "捐赠记录", path: "/rescue/donations" },
           { label: "库存管理", path: "/rescue/inventory" },
           ...(this.isOrgAdmin ? [{ label: "员工管理", path: "/rescue/employees" }] : [])
         ],
         ADMIN: [
           { label: "数据监控", path: "/admin/dashboard" },
           { label: "统计报表", path: "/admin/reports" },
-          { label: "权限配置", path: "/admin/acl" },
           { label: "审核管理", path: "/admin/approvals" },
           { label: "机构管理", path: "/admin/organizations" },
           { label: "账号管理", path: "/admin/users" }
@@ -95,9 +99,6 @@ export default {
       this.$store.dispatch("auth/logout");
       this.$router.push("/login");
     },
-    toMessages() {
-      this.$router.push("/messages");
-    }
   }
 };
 </script>

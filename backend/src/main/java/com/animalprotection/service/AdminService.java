@@ -2,6 +2,7 @@ package com.animalprotection.service;
 
 import com.animalprotection.dto.AdminUserRequest;
 import com.animalprotection.dto.ApprovalFlowRequest;
+import com.animalprotection.dto.ContentCategoryRequest;
 import com.animalprotection.dto.OrganizationRequest;
 import com.animalprotection.dto.RolePermissionRequest;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -48,16 +49,223 @@ public class AdminService {
     }
 
     public List<Map<String, Object>> approvalFlows() {
-        return jdbcTemplate.queryForList("SELECT id, flow_code, flow_name, biz_type, steps FROM ap_approval_flow");
+        return jdbcTemplate.queryForList(
+                "SELECT id, flow_code, flow_name, biz_type, steps FROM ap_approval_flow WHERE status = 1"
+        );
     }
 
     public void saveApprovalFlow(ApprovalFlowRequest request) {
+        Integer dup = jdbcTemplate.queryForObject(
+                "SELECT COUNT(1) FROM ap_approval_flow WHERE flow_code = ? AND (? IS NULL OR id <> ?)",
+                Integer.class,
+                request.getFlowCode(),
+                request.getId(),
+                request.getId()
+        );
+        if (dup != null && dup > 0) {
+            throw new IllegalArgumentException("流程编码已存在");
+        }
         if (request.getId() == null) {
             jdbcTemplate.update("INSERT INTO ap_approval_flow (flow_code, flow_name, biz_type, steps, status, created_at, updated_at) VALUES (?, ?, ?, ?, 1, NOW(3), NOW(3))",
                     request.getFlowCode(), request.getFlowName(), request.getBizType(), request.getSteps());
         } else {
             jdbcTemplate.update("UPDATE ap_approval_flow SET flow_code = ?, flow_name = ?, biz_type = ?, steps = ?, updated_at = NOW(3) WHERE id = ?",
                     request.getFlowCode(), request.getFlowName(), request.getBizType(), request.getSteps(), request.getId());
+        }
+    }
+
+    public void deleteApprovalFlow(Long id) {
+        jdbcTemplate.update("DELETE FROM ap_approval_flow WHERE id = ?", id);
+    }
+
+    public List<Map<String, Object>> contentCategories() {
+        return jdbcTemplate.queryForList(
+                "SELECT c.id, c.name, c.sort_no, c.status, c.approval_flow_id, f.flow_name " +
+                        "FROM ap_content_category c " +
+                        "LEFT JOIN ap_approval_flow f ON c.approval_flow_id = f.id " +
+                        "ORDER BY c.sort_no ASC, c.id ASC"
+        );
+    }
+
+    public void saveContentCategory(ContentCategoryRequest request) {
+        Integer dup = jdbcTemplate.queryForObject(
+                "SELECT COUNT(1) FROM ap_content_category WHERE name = ? AND (? IS NULL OR id <> ?)",
+                Integer.class,
+                request.getName(),
+                request.getId(),
+                request.getId()
+        );
+        if (dup != null && dup > 0) {
+            throw new IllegalArgumentException("分类名称已存在");
+        }
+        if (request.getId() == null) {
+            jdbcTemplate.update("INSERT INTO ap_content_category (name, sort_no, status, approval_flow_id, created_at, updated_at) " +
+                            "VALUES (?, ?, ?, ?, NOW(3), NOW(3))",
+                    request.getName(),
+                    request.getSortNo() == null ? 0 : request.getSortNo(),
+                    request.getStatus() == null ? 1 : request.getStatus(),
+                    request.getApprovalFlowId());
+        } else {
+            jdbcTemplate.update("UPDATE ap_content_category SET name = ?, sort_no = ?, status = ?, approval_flow_id = ?, updated_at = NOW(3) WHERE id = ?",
+                    request.getName(),
+                    request.getSortNo() == null ? 0 : request.getSortNo(),
+                    request.getStatus() == null ? 1 : request.getStatus(),
+                    request.getApprovalFlowId(),
+                    request.getId());
+        }
+    }
+
+    public void deleteContentCategory(Long id) {
+        jdbcTemplate.update("DELETE FROM ap_content_category WHERE id = ?", id);
+    }
+
+    public List<Map<String, Object>> contentApprovals(String status) {
+        return contentApprovalsByRole(status, "ADMIN", null);
+    }
+
+    public void approveContent(Long instanceId, Long adminUserId) {
+        processApproval(instanceId, "ADMIN", null, true, null);
+    }
+
+    public void rejectContent(Long instanceId, String note, Long adminUserId) {
+        processApproval(instanceId, "ADMIN", null, false, note);
+    }
+
+    public List<Map<String, Object>> contentApprovalsByRole(String status, String roleCode, Long orgId) {
+        StringBuilder sql = new StringBuilder(
+                "SELECT i.id AS instance_id, i.status AS approval_status, i.current_step, i.created_at, " +
+                        "f.steps, " +
+                        "c.id AS content_id, c.title, c.content_type, c.cover_url, c.author_role, c.author_user_id, c.target_org_id, " +
+                        "cat.name AS category_name, COALESCE(u.nickname, u.phone) AS author_name, " +
+                        "o.name AS target_org_name " +
+                        "FROM ap_approval_instance i " +
+                        "JOIN ap_approval_flow f ON i.flow_id = f.id " +
+                        "JOIN ap_content c ON i.biz_id = c.id " +
+                        "LEFT JOIN ap_content_category cat ON c.category_id = cat.id " +
+                        "LEFT JOIN ap_user u ON c.author_user_id = u.id " +
+                        "LEFT JOIN ap_organization o ON c.target_org_id = o.id " +
+                        "WHERE i.biz_type = 'CONTENT' "
+        );
+        java.util.List<Object> args = new java.util.ArrayList<>();
+        if (status != null && !status.trim().isEmpty()) {
+            sql.append("AND i.status = ? ");
+            args.add(status);
+        }
+        sql.append("ORDER BY i.created_at DESC");
+        List<Map<String, Object>> rows = jdbcTemplate.queryForList(sql.toString(), args.toArray());
+        java.util.List<Map<String, Object>> filtered = new java.util.ArrayList<>();
+        for (Map<String, Object> row : rows) {
+            Object steps = row.get("steps");
+            Object currentStep = row.get("current_step");
+            String currentRole = resolveCurrentRole(steps, currentStep);
+            Long currentOrgId = resolveCurrentOrgId(steps, currentStep);
+            if (currentRole == null) {
+                continue;
+            }
+            if (roleCode != null && !roleCode.equalsIgnoreCase(currentRole)) {
+                continue;
+            }
+            if (( "LAW".equalsIgnoreCase(currentRole) || "RESCUE".equalsIgnoreCase(currentRole) )
+                    && orgId != null) {
+                if (currentOrgId == null || !currentOrgId.equals(orgId)) {
+                    continue;
+                }
+            }
+            row.put("current_role", currentRole);
+            filtered.add(row);
+        }
+        return filtered;
+    }
+
+    public void approveContentByRole(Long instanceId, String roleCode, Long orgId) {
+        processApproval(instanceId, roleCode, orgId, true, null);
+    }
+
+    public void rejectContentByRole(Long instanceId, String roleCode, Long orgId, String note) {
+        processApproval(instanceId, roleCode, orgId, false, note);
+    }
+
+    private void processApproval(Long instanceId, String roleCode, Long orgId, boolean approve, String note) {
+        List<Map<String, Object>> rows = jdbcTemplate.queryForList(
+                "SELECT i.id, i.current_step, i.status, f.steps, c.target_org_id, c.id AS content_id " +
+                        "FROM ap_approval_instance i " +
+                        "JOIN ap_approval_flow f ON i.flow_id = f.id " +
+                        "JOIN ap_content c ON i.biz_id = c.id " +
+                        "WHERE i.id = ?",
+                instanceId
+        );
+        if (rows.isEmpty()) {
+            return;
+        }
+        Map<String, Object> row = rows.get(0);
+        Object steps = row.get("steps");
+        Object currentStep = row.get("current_step");
+        String currentRole = resolveCurrentRole(steps, currentStep);
+        Long currentOrgId = resolveCurrentOrgId(steps, currentStep);
+        if (currentRole == null || (roleCode != null && !roleCode.equalsIgnoreCase(currentRole))) {
+            return;
+        }
+        if (("LAW".equalsIgnoreCase(currentRole) || "RESCUE".equalsIgnoreCase(currentRole)) && orgId != null) {
+            if (currentOrgId == null || !currentOrgId.equals(orgId)) {
+                return;
+            }
+        }
+        Long contentId = ((Number) row.get("content_id")).longValue();
+        if (!approve) {
+            jdbcTemplate.update("UPDATE ap_approval_instance SET status = 'REJECTED', updated_at = NOW(3) WHERE id = ?",
+                    instanceId);
+            jdbcTemplate.update("UPDATE ap_content SET status = 'REJECTED', updated_at = NOW(3) WHERE id = ?", contentId);
+            return;
+        }
+        int nextStep = ((Number) row.get("current_step")).intValue() + 1;
+        String nextRole = resolveCurrentRole(row.get("steps"), nextStep);
+        if (nextRole == null) {
+            jdbcTemplate.update("UPDATE ap_approval_instance SET status = 'APPROVED', updated_at = NOW(3) WHERE id = ?",
+                    instanceId);
+            jdbcTemplate.update("UPDATE ap_content SET status = 'PUBLISHED', published_at = NOW(3), updated_at = NOW(3) WHERE id = ?",
+                    contentId);
+        } else {
+            jdbcTemplate.update("UPDATE ap_approval_instance SET current_step = ?, updated_at = NOW(3) WHERE id = ?",
+                    nextStep, instanceId);
+        }
+    }
+
+    private String resolveCurrentRole(Object stepsObj, Object currentStepObj) {
+        if (stepsObj == null || currentStepObj == null) {
+            return null;
+        }
+        int step = currentStepObj instanceof Number ? ((Number) currentStepObj).intValue() : 1;
+        try {
+            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            java.util.List<java.util.Map<String, Object>> list = mapper.readValue(stepsObj.toString(), java.util.List.class);
+            if (step <= 0 || step > list.size()) {
+                return null;
+            }
+            Object role = list.get(step - 1).get("role");
+            return role == null ? null : role.toString();
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private Long resolveCurrentOrgId(Object stepsObj, Object currentStepObj) {
+        if (stepsObj == null || currentStepObj == null) {
+            return null;
+        }
+        int step = currentStepObj instanceof Number ? ((Number) currentStepObj).intValue() : 1;
+        try {
+            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            java.util.List<java.util.Map<String, Object>> list = mapper.readValue(stepsObj.toString(), java.util.List.class);
+            if (step <= 0 || step > list.size()) {
+                return null;
+            }
+            Object orgId = list.get(step - 1).get("orgId");
+            if (orgId instanceof Number) {
+                return ((Number) orgId).longValue();
+            }
+            return null;
+        } catch (Exception e) {
+            return null;
         }
     }
 

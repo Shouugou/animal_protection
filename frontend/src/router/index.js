@@ -4,8 +4,9 @@ import store from "../store";
 
 import Layout from "@/components/Layout.vue";
 import Login from "@/views/Login.vue";
-import Messages from "@/views/common/Messages.vue";
 import Forbidden from "@/views/common/Forbidden.vue";
+import ContentManage from "@/views/common/ContentManage.vue";
+import ContentApprovals from "@/views/common/ContentApprovals.vue";
 
 import PublicEvents from "@/views/public/Events.vue";
 import PublicEventDetail from "@/views/public/EventDetail.vue";
@@ -25,6 +26,7 @@ import LawMyTasks from "@/views/law/MyTasks.vue";
 import LawVolunteerTasks from "@/views/law/TaskPublish.vue";
 import LawArchives from "@/views/law/ArchivedCases.vue";
 import LawEmployees from "@/views/law/Employees.vue";
+import LawDonations from "@/views/law/Donations.vue";
 
 import RescueTasks from "@/views/rescue/Tasks.vue";
 import RescueVolunteerTasks from "@/views/rescue/TaskPublish.vue";
@@ -35,10 +37,10 @@ import RescueEmployees from "@/views/rescue/Employees.vue";
 import RescueVehicles from "@/views/rescue/Vehicles.vue";
 import RescueSharedCases from "@/views/rescue/SharedCases.vue";
 import RescueAdoption from "@/views/rescue/Adoption.vue";
+import RescueDonations from "@/views/rescue/Donations.vue";
 
 import AdminDashboard from "@/views/admin/Dashboard.vue";
 import AdminReports from "@/views/admin/Reports.vue";
-import AdminAcl from "@/views/admin/ACL.vue";
 import AdminApprovals from "@/views/admin/Approvals.vue";
 import AdminOrganizations from "@/views/admin/Organizations.vue";
 import AdminUsers from "@/views/admin/Users.vue";
@@ -56,8 +58,6 @@ const router = new Router({
       path: "/",
       component: Layout,
       children: [
-        { path: "messages", component: Messages, ...roleAny(["PUBLIC", "LAW", "RESCUE", "ADMIN"]) },
-
         { path: "public/events", component: PublicEvents, ...roleOnly("PUBLIC") },
         { path: "public/events/new", component: PublicEventNew, ...roleOnly("PUBLIC") },
         { path: "public/events/:id", component: PublicEventDetail, ...roleOnly("PUBLIC") },
@@ -74,23 +74,28 @@ const router = new Router({
         { path: "law/workorders/:id", component: LawWorkOrderDetail, ...roleOnly("LAW") },
         { path: "law/my-tasks", component: LawMyTasks, ...roleOnly("LAW") },
         { path: "law/volunteer-tasks", component: LawVolunteerTasks, ...roleOnly("LAW") },
+        { path: "law/classroom", component: ContentManage, ...roleOnly("LAW") },
+        { path: "law/content-approvals", component: ContentApprovals, ...roleOnly("LAW") },
         { path: "law/archives", component: LawArchives, ...roleOnly("LAW") },
         { path: "law/employees", component: LawEmployees, ...roleOnly("LAW") },
+        { path: "law/donations", component: LawDonations, ...roleOnly("LAW") },
 
         { path: "rescue/tasks", component: RescueTasks, ...roleOnly("RESCUE") },
+        { path: "rescue/classroom", component: ContentManage, ...roleOnly("RESCUE") },
+        { path: "rescue/content-approvals", component: ContentApprovals, ...roleOnly("RESCUE") },
         { path: "rescue/volunteer-tasks", component: RescueVolunteerTasks, ...roleOnly("RESCUE") },
         { path: "rescue/animals", component: RescueAnimals, ...roleOnly("RESCUE") },
         { path: "rescue/animals/:id/records", component: MedicalRecords, ...roleOnly("RESCUE") },
         { path: "rescue/medical-records", component: MedicalRecords, ...roleOnly("RESCUE") },
         { path: "rescue/shared-cases", component: RescueSharedCases, ...roleOnly("RESCUE") },
         { path: "rescue/adoption", component: RescueAdoption, ...roleOnly("RESCUE") },
+        { path: "rescue/donations", component: RescueDonations, ...roleOnly("RESCUE") },
         { path: "rescue/inventory", component: Inventory, ...roleOnly("RESCUE") },
         { path: "rescue/vehicles", component: RescueVehicles, ...roleOnly("RESCUE") },
         { path: "rescue/employees", component: RescueEmployees, ...roleOnly("RESCUE") },
 
         { path: "admin/dashboard", component: AdminDashboard, ...roleOnly("ADMIN") },
         { path: "admin/reports", component: AdminReports, ...roleOnly("ADMIN") },
-        { path: "admin/acl", component: AdminAcl, ...roleOnly("ADMIN") },
         { path: "admin/approvals", component: AdminApprovals, ...roleOnly("ADMIN") },
         { path: "admin/organizations", component: AdminOrganizations, ...roleOnly("ADMIN") },
         { path: "admin/users", component: AdminUsers, ...roleOnly("ADMIN") },
