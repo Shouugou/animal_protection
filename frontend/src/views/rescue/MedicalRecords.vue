@@ -18,6 +18,7 @@
           <el-option label="治疗" value="TREATMENT" />
           <el-option label="用药" value="MEDICATION" />
           <el-option label="康复" value="REHAB" />
+          <el-option label="治疗完成" value="TREATMENT_DONE" />
         </el-select>
       </el-form-item>
       <el-form-item v-if="form.type !== 'MEDICATION'" label="记录内容">
@@ -165,6 +166,7 @@ export default {
         TREATMENT: "治疗",
         MEDICATION: "用药",
         REHAB: "康复",
+        TREATMENT_DONE: "治疗完成",
         OTHER: "其他"
       }[type] || type || "未知";
     },

@@ -17,8 +17,9 @@
             <el-option label="全部" value="" />
             <el-option label="已上报" value="REPORTED" />
             <el-option label="处理中" value="PROCESSING" />
+            <el-option label="救助中" value="RESCUE_PROCESSING" />
             <el-option label="已处置" value="RESOLVED" />
-            <el-option label="已闭环" value="CLOSED" />
+            <el-option label="已办结" value="CLOSED" />
             <el-option label="不予受理" value="REJECTED" />
           </el-select>
         </el-form-item>
@@ -87,6 +88,7 @@ export default {
         TRIAGED: "已分流",
         DISPATCHED: "已派单",
         PROCESSING: "处理中",
+        RESCUE_PROCESSING: "救助中",
         PENDING_SUPPLEMENT: "待补充",
         RESOLVED: "已处置",
         CLOSED: "已办结",
@@ -101,6 +103,7 @@ export default {
         TRIAGED: "warning",
         DISPATCHED: "warning",
         PROCESSING: "warning",
+        RESCUE_PROCESSING: "warning",
         PENDING_SUPPLEMENT: "warning",
         RESOLVED: "success",
         CLOSED: "success",

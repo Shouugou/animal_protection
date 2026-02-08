@@ -214,6 +214,7 @@ export default {
     animalStatusText(status) {
       return {
         IN_CARE: "照护中",
+        TREATED: "治疗完成",
         READY_FOR_ADOPTION: "可领养",
         ADOPTED: "已领养",
         RELEASED: "已放归",

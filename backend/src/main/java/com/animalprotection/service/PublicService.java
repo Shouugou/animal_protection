@@ -359,45 +359,195 @@ public class PublicService {
         return reportId;
     }
 
-    public List<Map<String, Object>> animals() {
-        return jdbcTemplate.queryForList("SELECT id, species, status FROM ap_animal WHERE deleted_at IS NULL AND status = 'READY_FOR_ADOPTION' ORDER BY created_at DESC");
+    public List<Map<String, Object>> adoptionListings() {
+        List<Map<String, Object>> list = jdbcTemplate.queryForList(
+                "SELECT l.id, l.title, l.description, l.status, l.published_at, " +
+                        "a.id AS animal_id, a.name AS animal_name, a.species, a.health_summary, a.status AS animal_status " +
+                        "FROM ap_adoption_listing l " +
+                        "JOIN ap_animal a ON l.animal_id = a.id " +
+                        "WHERE l.status = 'OPEN' AND l.deleted_at IS NULL " +
+                        "ORDER BY l.published_at DESC"
+        );
+        for (Map<String, Object> row : list) {
+            Long listingId = ((Number) row.get("id")).longValue();
+            row.put("attachments", listAttachmentUrls("ADOPTION_LISTING", listingId));
+        }
+        return list;
     }
 
-    public Long createAdoption(AdoptionRequest request, Long userId) {
-        String sql = "INSERT INTO ap_adoption (animal_id, applicant_user_id, status, apply_form, applied_at, created_at, updated_at) VALUES (?, ?, 'APPLIED', ?, NOW(3), NOW(3), NOW(3))";
+    public Map<String, Object> adoptionListingDetail(Long listingId) {
+        Map<String, Object> detail = jdbcTemplate.queryForMap(
+                "SELECT l.id, l.title, l.description, l.status, l.published_at, " +
+                        "a.id AS animal_id, a.name AS animal_name, a.species, a.health_summary, a.status AS animal_status " +
+                        "FROM ap_adoption_listing l " +
+                        "JOIN ap_animal a ON l.animal_id = a.id " +
+                        "WHERE l.id = ? AND l.deleted_at IS NULL",
+                listingId
+        );
+        detail.put("attachments", listAttachmentUrls("ADOPTION_LISTING", listingId));
+        List<Map<String, Object>> records = jdbcTemplate.queryForList(
+                "SELECT id, record_type, record_content, recorded_at FROM ap_medical_record WHERE animal_id = ? ORDER BY recorded_at DESC",
+                detail.get("animal_id")
+        );
+        detail.put("medical_records", records);
+        return detail;
+    }
+
+    public Long applyAdoption(Long listingId, String applyForm, Long userId) {
+        Integer count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(1) FROM ap_adoption_listing WHERE id = ? AND status = 'OPEN' AND deleted_at IS NULL",
+                Integer.class,
+                listingId
+        );
+        if (count == null || count == 0) {
+            return null;
+        }
+        Integer claimed = jdbcTemplate.queryForObject(
+                "SELECT COUNT(1) FROM ap_adoption WHERE applicant_user_id = ? AND animal_id = " +
+                        "(SELECT animal_id FROM ap_adoption_listing WHERE id = ?)",
+                Integer.class,
+                userId,
+                listingId
+        );
+        if (claimed != null && claimed > 0) {
+            return null;
+        }
+        String sql = "INSERT INTO ap_adoption (animal_id, applicant_user_id, status, apply_form, applied_at, decided_at, created_at, updated_at) " +
+                "VALUES ((SELECT animal_id FROM ap_adoption_listing WHERE id = ?), ?, 'APPROVED', ?, NOW(3), NOW(3), NOW(3), NOW(3))";
         KeyHolder keyHolder = new GeneratedKeyHolder();
         jdbcTemplate.update(con -> {
             PreparedStatement ps = con.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS);
-            ps.setLong(1, request.getAnimalId());
+            ps.setLong(1, listingId);
             ps.setLong(2, userId);
-            ps.setString(3, request.getApplyForm());
+            ps.setString(3, applyForm);
             return ps;
         }, keyHolder);
+        jdbcTemplate.update("UPDATE ap_adoption_listing SET status = 'ADOPTED', updated_at = NOW(3) WHERE id = ?", listingId);
+        jdbcTemplate.update("UPDATE ap_animal SET status = 'ADOPTED', updated_at = NOW(3) WHERE id = (SELECT animal_id FROM ap_adoption_listing WHERE id = ?)",
+                listingId);
+        jdbcTemplate.update("INSERT INTO ap_event_timeline (event_id, node_type, content, operator_role, operator_user_id, created_at) " +
+                        "VALUES ((SELECT event_id FROM ap_rescue_task WHERE id = (SELECT rescue_task_id FROM ap_animal WHERE id = (SELECT animal_id FROM ap_adoption_listing WHERE id = ?))), " +
+                        "'领养', ?, 'PUBLIC', ?, NOW(3))",
+                listingId, "动物已被领养", userId);
         return keyHolder.getKey().longValue();
     }
 
-    public List<Map<String, Object>> followups(Long userId) {
-        return jdbcTemplate.queryForList(
-                "SELECT f.id, f.adoption_id, f.submitted_at, f.due_at " +
-                        "FROM ap_follow_up f JOIN ap_adoption a ON f.adoption_id = a.id " +
-                        "WHERE a.applicant_user_id = ? ORDER BY f.submitted_at DESC",
-                userId
+    public Long findListingIdByAnimal(Long animalId) {
+        if (animalId == null) {
+            return null;
+        }
+        List<Map<String, Object>> rows = jdbcTemplate.queryForList(
+                "SELECT id FROM ap_adoption_listing WHERE animal_id = ? AND status = 'OPEN' AND deleted_at IS NULL ORDER BY id DESC LIMIT 1",
+                animalId
         );
+        if (rows.isEmpty()) {
+            return null;
+        }
+        Object id = rows.get(0).get("id");
+        return id instanceof Number ? ((Number) id).longValue() : null;
     }
 
-    public Long submitFollowup(FollowupRequest request) {
-        String sql = "INSERT INTO ap_follow_up (adoption_id, due_at, questionnaire, submitted_at, created_at) VALUES (?, ?, ?, NOW(3), NOW(3))";
+    public List<Map<String, Object>> myAdoptions(Long userId) {
+        List<Map<String, Object>> list = jdbcTemplate.queryForList(
+                "SELECT a.id, a.animal_id, a.status, a.applied_at, a.decided_at, " +
+                        "l.id AS listing_id, l.title, l.description, l.status AS listing_status, " +
+                        "an.name AS animal_name, an.species, an.health_summary, an.status AS animal_status " +
+                        "FROM ap_adoption a " +
+                        "JOIN ap_animal an ON a.animal_id = an.id " +
+                        "LEFT JOIN ap_adoption_listing l ON l.animal_id = an.id " +
+                        "WHERE a.applicant_user_id = ? ORDER BY a.applied_at DESC",
+                userId
+        );
+        for (Map<String, Object> row : list) {
+            Object listingId = row.get("listing_id");
+            if (listingId instanceof Number) {
+                row.put("attachments", listAttachmentUrls("ADOPTION_LISTING", ((Number) listingId).longValue()));
+            } else {
+                row.put("attachments", java.util.Collections.emptyList());
+            }
+        }
+        return list;
+    }
+
+    public List<Map<String, Object>> followupTasks(Long userId, String status) {
+        StringBuilder sql = new StringBuilder(
+                "SELECT t.id, t.adoption_id, t.status, t.questionnaire_template, t.sent_at, t.submitted_at, " +
+                        "a.animal_id, an.name AS animal_name, an.species, " +
+                        "l.id AS listing_id, l.title " +
+                        "FROM ap_follow_up_task t " +
+                        "JOIN ap_adoption a ON t.adoption_id = a.id " +
+                        "LEFT JOIN ap_adoption_listing l ON a.animal_id = l.animal_id " +
+                        "LEFT JOIN ap_animal an ON a.animal_id = an.id " +
+                        "WHERE a.applicant_user_id = ? "
+        );
+        if (status != null && !status.trim().isEmpty()) {
+            sql.append("AND t.status = ? ");
+        }
+        sql.append("ORDER BY t.sent_at DESC");
+        if (status != null && !status.trim().isEmpty()) {
+            return jdbcTemplate.queryForList(sql.toString(), userId, status);
+        }
+        return jdbcTemplate.queryForList(sql.toString(), userId);
+    }
+
+    public Map<String, Object> followupTaskDetail(Long taskId, Long userId) {
+        Map<String, Object> task = jdbcTemplate.queryForMap(
+                "SELECT t.id, t.adoption_id, t.status, t.questionnaire_template, t.sent_at, t.submitted_at, " +
+                        "a.animal_id, an.name AS animal_name, an.species, " +
+                        "l.id AS listing_id, l.title " +
+                        "FROM ap_follow_up_task t " +
+                        "JOIN ap_adoption a ON t.adoption_id = a.id " +
+                        "LEFT JOIN ap_adoption_listing l ON a.animal_id = l.animal_id " +
+                        "LEFT JOIN ap_animal an ON a.animal_id = an.id " +
+                        "WHERE t.id = ? AND a.applicant_user_id = ?",
+                taskId, userId
+        );
+        List<Map<String, Object>> followups = jdbcTemplate.queryForList(
+                "SELECT id, questionnaire, submitted_at FROM ap_follow_up WHERE adoption_id = ? ORDER BY submitted_at DESC LIMIT 1",
+                task.get("adoption_id")
+        );
+        if (!followups.isEmpty()) {
+            Map<String, Object> answer = followups.get(0);
+            Object followupId = answer.get("id");
+            if (followupId instanceof Number) {
+                answer.put("attachments", listAttachmentUrls("FOLLOW_UP", ((Number) followupId).longValue()));
+            } else {
+                answer.put("attachments", java.util.Collections.emptyList());
+            }
+            task.put("answer", answer);
+        }
+        return task;
+    }
+
+    public Long submitFollowupTask(Long taskId, String questionnaire, List<String> attachments, Long userId) {
+        Integer count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(1) FROM ap_follow_up_task t JOIN ap_adoption a ON t.adoption_id = a.id " +
+                        "WHERE t.id = ? AND t.status = 'PENDING' AND a.applicant_user_id = ?",
+                Integer.class,
+                taskId, userId
+        );
+        if (count == null || count == 0) {
+            return null;
+        }
+        Long adoptionId = jdbcTemplate.queryForObject(
+                "SELECT adoption_id FROM ap_follow_up_task WHERE id = ?",
+                Long.class,
+                taskId
+        );
+        String sql = "INSERT INTO ap_follow_up (adoption_id, due_at, questionnaire, submitted_at, created_at) " +
+                "VALUES (?, DATE_ADD((SELECT sent_at FROM ap_follow_up_task WHERE id = ?), INTERVAL 7 DAY), ?, NOW(3), NOW(3))";
         KeyHolder keyHolder = new GeneratedKeyHolder();
         jdbcTemplate.update(con -> {
             PreparedStatement ps = con.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS);
-            ps.setLong(1, request.getAdoptionId());
-            ps.setString(2, request.getDueAt());
-            ps.setString(3, request.getQuestionnaire());
+            ps.setLong(1, adoptionId);
+            ps.setLong(2, taskId);
+            ps.setString(3, questionnaire);
             return ps;
         }, keyHolder);
-        Long id = keyHolder.getKey().longValue();
-        saveAttachments("FOLLOW_UP", id, request.getAttachments(), 1L);
-        return id;
+        Long followupId = keyHolder.getKey().longValue();
+        saveAttachments("FOLLOW_UP", followupId, attachments, userId);
+        jdbcTemplate.update("UPDATE ap_follow_up_task SET status = 'SUBMITTED', submitted_at = NOW(3), updated_at = NOW(3) WHERE id = ?", taskId);
+        return followupId;
     }
 
     public Long donate(DonationRequest request, Long userId) {
@@ -432,5 +582,21 @@ public class PublicService {
             jdbcTemplate.update("INSERT INTO ap_attachment (biz_type, biz_id, file_url, uploader_user_id, created_at) VALUES (?, ?, ?, ?, NOW(3))",
                     bizType, bizId, url, uploaderUserId);
         }
+    }
+
+    private java.util.List<String> listAttachmentUrls(String bizType, Long bizId) {
+        List<Map<String, Object>> attachments = jdbcTemplate.queryForList(
+                "SELECT file_url FROM ap_attachment WHERE biz_type = ? AND biz_id = ? ORDER BY created_at ASC",
+                bizType,
+                bizId
+        );
+        java.util.List<String> urls = new java.util.ArrayList<>();
+        for (Map<String, Object> row : attachments) {
+            Object url = row.get("file_url");
+            if (url != null) {
+                urls.add(url.toString());
+            }
+        }
+        return urls;
     }
 }

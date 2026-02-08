@@ -2,6 +2,7 @@ package com.animalprotection.controller;
 
 import com.animalprotection.common.ApiResponse;
 import com.animalprotection.dto.AnimalCreateRequest;
+import com.animalprotection.dto.AdoptionListingRequest;
 import com.animalprotection.dto.InventoryTxnRequest;
 import com.animalprotection.dto.MedicalRecordRequest;
 import com.animalprotection.dto.RescueDispatchRequest;
@@ -266,5 +267,44 @@ public class RescueController {
         Long userId = com.animalprotection.common.AuthContext.getUserId();
         rescueService.deleteEmployee(id, userId);
         return ApiResponse.ok(true);
+    }
+
+    @GetMapping("/adoption-listings")
+    public ApiResponse<?> adoptionListings(@RequestParam(required = false) String status) {
+        Long userId = com.animalprotection.common.AuthContext.getUserId();
+        return ApiResponse.ok(rescueService.adoptionListings(userId, status));
+    }
+
+    @PostMapping("/adoption-listings")
+    public ApiResponse<?> createAdoptionListing(@RequestBody AdoptionListingRequest request) {
+        Long userId = com.animalprotection.common.AuthContext.getUserId();
+        Long id = rescueService.createAdoptionListing(request, userId);
+        if (id == null) {
+            return ApiResponse.error("领养发布失败");
+        }
+        return ApiResponse.ok(id);
+    }
+
+    @DeleteMapping("/adoption-listings/{id}")
+    public ApiResponse<?> deleteAdoptionListing(@PathVariable Long id) {
+        Long userId = com.animalprotection.common.AuthContext.getUserId();
+        rescueService.deleteAdoptionListing(id, userId);
+        return ApiResponse.ok(true);
+    }
+
+    @PostMapping("/adoptions/{id}/followup")
+    public ApiResponse<?> sendFollowup(@PathVariable Long id) {
+        Long userId = com.animalprotection.common.AuthContext.getUserId();
+        Long taskId = rescueService.sendFollowupTask(id, userId);
+        if (taskId == null) {
+            return ApiResponse.error("发送回访失败");
+        }
+        return ApiResponse.ok(taskId);
+    }
+
+    @GetMapping("/adoptions/{id}/followup-detail")
+    public ApiResponse<?> followupDetail(@PathVariable Long id) {
+        Long userId = com.animalprotection.common.AuthContext.getUserId();
+        return ApiResponse.ok(rescueService.followupDetail(id, userId));
     }
 }

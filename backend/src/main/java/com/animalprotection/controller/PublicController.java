@@ -73,24 +73,99 @@ public class PublicController {
 
     @GetMapping("/animals")
     public ApiResponse<?> animals() {
-        return ApiResponse.ok(publicService.animals());
+        return ApiResponse.ok(publicService.adoptionListings());
+    }
+
+    @GetMapping("/adoption-listings")
+    public ApiResponse<?> adoptionListings() {
+        return ApiResponse.ok(publicService.adoptionListings());
+    }
+
+    @GetMapping("/adoption-listings/{id}")
+    public ApiResponse<?> adoptionListingDetail(@PathVariable Long id) {
+        return ApiResponse.ok(publicService.adoptionListingDetail(id));
+    }
+
+    @PostMapping("/adoption-listings/{id}/apply")
+    public ApiResponse<?> applyAdoption(@PathVariable Long id, @RequestBody java.util.Map<String, Object> body) {
+        Long userId = com.animalprotection.common.AuthContext.getUserId();
+        String applyForm = body.get("applyForm") == null ? "{}" : body.get("applyForm").toString();
+        Long adoptionId = publicService.applyAdoption(id, applyForm, userId);
+        if (adoptionId == null) {
+            return ApiResponse.error("领养申请失败");
+        }
+        return ApiResponse.ok(adoptionId);
     }
 
     @PostMapping("/adoptions")
     public ApiResponse<?> adoptions(@RequestBody AdoptionRequest request) {
         Long userId = com.animalprotection.common.AuthContext.getUserId();
-        return ApiResponse.ok(publicService.createAdoption(request, userId));
+        Long listingId = request.getAnimalId();
+        if (listingId != null) {
+            Long found = publicService.findListingIdByAnimal(listingId);
+            if (found != null) {
+                listingId = found;
+            }
+        }
+        if (listingId == null) {
+            return ApiResponse.error("领养申请参数错误");
+        }
+        Long adoptionId = publicService.applyAdoption(listingId, request.getApplyForm(), userId);
+        if (adoptionId == null) {
+            return ApiResponse.error("领养申请失败");
+        }
+        return ApiResponse.ok(adoptionId);
+    }
+
+    @GetMapping("/adoptions/my")
+    public ApiResponse<?> myAdoptions() {
+        Long userId = com.animalprotection.common.AuthContext.getUserId();
+        return ApiResponse.ok(publicService.myAdoptions(userId));
     }
 
     @GetMapping("/followups")
     public ApiResponse<?> followups() {
         Long userId = com.animalprotection.common.AuthContext.getUserId();
-        return ApiResponse.ok(publicService.followups(userId));
+        return ApiResponse.ok(publicService.followupTasks(userId, null));
+    }
+
+    @GetMapping("/followup-tasks")
+    public ApiResponse<?> followupTasks(@RequestParam(required = false) String status) {
+        Long userId = com.animalprotection.common.AuthContext.getUserId();
+        return ApiResponse.ok(publicService.followupTasks(userId, status));
+    }
+
+    @GetMapping("/followup-tasks/{id}")
+    public ApiResponse<?> followupTaskDetail(@PathVariable Long id) {
+        Long userId = com.animalprotection.common.AuthContext.getUserId();
+        return ApiResponse.ok(publicService.followupTaskDetail(id, userId));
     }
 
     @PostMapping("/followups")
     public ApiResponse<?> followupSubmit(@RequestBody FollowupRequest request) {
-        return ApiResponse.ok(publicService.submitFollowup(request));
+        Long userId = com.animalprotection.common.AuthContext.getUserId();
+        Long taskId = request.getAdoptionId();
+        if (taskId == null) {
+            return ApiResponse.error("回访参数错误");
+        }
+        Long id = publicService.submitFollowupTask(taskId, request.getQuestionnaire(), request.getAttachments(), userId);
+        if (id == null) {
+            return ApiResponse.error("回访提交失败");
+        }
+        return ApiResponse.ok(id);
+    }
+
+    @PostMapping("/followup-tasks/{id}/submit")
+    public ApiResponse<?> followupTaskSubmit(@PathVariable Long id, @RequestBody java.util.Map<String, Object> body) {
+        Long userId = com.animalprotection.common.AuthContext.getUserId();
+        String questionnaire = body.get("questionnaire") == null ? "{}" : body.get("questionnaire").toString();
+        @SuppressWarnings("unchecked")
+        java.util.List<String> attachments = (java.util.List<String>) body.get("attachments");
+        Long followupId = publicService.submitFollowupTask(id, questionnaire, attachments, userId);
+        if (followupId == null) {
+            return ApiResponse.error("回访提交失败");
+        }
+        return ApiResponse.ok(followupId);
     }
 
     @PostMapping("/donations")

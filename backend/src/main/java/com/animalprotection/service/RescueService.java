@@ -97,6 +97,10 @@ public class RescueService {
             jdbcTemplate.update("UPDATE ap_event SET status = 'CLOSED', updated_at = NOW(3) WHERE id = (SELECT event_id FROM ap_rescue_task WHERE id = ?)",
                     id);
         }
+        if (need) {
+            jdbcTemplate.update("UPDATE ap_event SET status = 'RESCUE_PROCESSING', updated_at = NOW(3) WHERE id = (SELECT event_id FROM ap_rescue_task WHERE id = ?)",
+                    id);
+        }
         String content = need ? "评估通过，进入救助流程" : "评估不救助";
         if (request.getNote() != null && !request.getNote().trim().isEmpty()) {
             content = content + "：" + request.getNote().trim();
@@ -104,6 +108,11 @@ public class RescueService {
         jdbcTemplate.update("INSERT INTO ap_event_timeline (event_id, node_type, content, operator_role, operator_user_id, created_at) " +
                         "VALUES ((SELECT event_id FROM ap_rescue_task WHERE id = ?), '救助评估', ?, 'RESCUE', ?, NOW(3))",
                 id, content, userId);
+        if (need) {
+            jdbcTemplate.update("INSERT INTO ap_event_timeline (event_id, node_type, content, operator_role, operator_user_id, created_at) " +
+                            "VALUES ((SELECT event_id FROM ap_rescue_task WHERE id = ?), '救助', ?, 'RESCUE', ?, NOW(3))",
+                    id, "救助中", userId);
+        }
     }
 
     public boolean dispatch(Long id, RescueDispatchRequest request, Long userId) {
@@ -222,6 +231,26 @@ public class RescueService {
         jdbcTemplate.update("INSERT INTO ap_event_timeline (event_id, node_type, content, operator_role, operator_user_id, created_at) " +
                         "VALUES ((SELECT event_id FROM ap_rescue_task WHERE id = (SELECT rescue_task_id FROM ap_animal WHERE id = ?)), '治疗记录', ?, 'RESCUE', ?, NOW(3))",
                 request.getAnimalId(), "新增治疗记录", recorderUserId);
+        if ("TREATMENT_DONE".equalsIgnoreCase(request.getRecordType())) {
+            jdbcTemplate.update("UPDATE ap_animal SET status = 'TREATED', updated_at = NOW(3) WHERE id = ?",
+                    request.getAnimalId());
+            jdbcTemplate.update("INSERT INTO ap_event_timeline (event_id, node_type, content, operator_role, operator_user_id, created_at) " +
+                            "VALUES ((SELECT event_id FROM ap_rescue_task WHERE id = (SELECT rescue_task_id FROM ap_animal WHERE id = ?)), '治疗完成', ?, 'RESCUE', ?, NOW(3))",
+                    request.getAnimalId(), "动物治疗完成", recorderUserId);
+            Integer remaining = jdbcTemplate.queryForObject(
+                    "SELECT COUNT(1) FROM ap_animal WHERE rescue_task_id = (SELECT rescue_task_id FROM ap_animal WHERE id = ?) " +
+                            "AND status <> 'TREATED' AND deleted_at IS NULL",
+                    Integer.class,
+                    request.getAnimalId()
+            );
+            if (remaining != null && remaining == 0) {
+                jdbcTemplate.update("UPDATE ap_event SET status = 'CLOSED', updated_at = NOW(3) WHERE id = (SELECT event_id FROM ap_rescue_task WHERE id = (SELECT rescue_task_id FROM ap_animal WHERE id = ?))",
+                        request.getAnimalId());
+                jdbcTemplate.update("INSERT INTO ap_event_timeline (event_id, node_type, content, operator_role, operator_user_id, created_at) " +
+                                "VALUES ((SELECT event_id FROM ap_rescue_task WHERE id = (SELECT rescue_task_id FROM ap_animal WHERE id = ?)), '办结', ?, 'RESCUE', ?, NOW(3))",
+                        request.getAnimalId(), "已办结", recorderUserId);
+            }
+        }
         return keyHolder.getKey().longValue();
     }
 
@@ -693,6 +722,195 @@ public class RescueService {
         );
     }
 
+    public List<Map<String, Object>> adoptionListings(Long userId, String status) {
+        Long orgId = findOrgId(userId, true);
+        if (orgId == null) {
+            return java.util.Collections.emptyList();
+        }
+        StringBuilder sql = new StringBuilder(
+                "SELECT l.id, l.animal_id, l.title, l.description, l.status, l.published_at, " +
+                        "a.name AS animal_name, a.species, a.health_summary, a.status AS animal_status, " +
+                        "ad.id AS adoption_id, ad.applicant_user_id, ad.applied_at, ad.decided_at, " +
+                        "COALESCE(u.nickname, u.phone) AS adopter_name, " +
+                        "t.id AS followup_task_id, t.status AS followup_status " +
+                        "FROM ap_adoption_listing l " +
+                        "JOIN ap_animal a ON l.animal_id = a.id " +
+                        "LEFT JOIN ap_adoption ad ON ad.animal_id = a.id AND ad.status = 'APPROVED' " +
+                        "LEFT JOIN ap_user u ON ad.applicant_user_id = u.id " +
+                        "LEFT JOIN ap_follow_up_task t ON t.adoption_id = ad.id " +
+                        "WHERE l.rescue_org_id = ? AND l.deleted_at IS NULL "
+        );
+        if (status != null && !status.trim().isEmpty()) {
+            sql.append("AND l.status = ? ");
+        }
+        sql.append("ORDER BY l.published_at DESC");
+        List<Map<String, Object>> list;
+        if (status != null && !status.trim().isEmpty()) {
+            list = jdbcTemplate.queryForList(sql.toString(), orgId, status);
+        } else {
+            list = jdbcTemplate.queryForList(sql.toString(), orgId);
+        }
+        for (Map<String, Object> row : list) {
+            Long listingId = ((Number) row.get("id")).longValue();
+            row.put("attachments", listAttachmentUrls("ADOPTION_LISTING", listingId));
+        }
+        return list;
+    }
+
+    public Long createAdoptionListing(com.animalprotection.dto.AdoptionListingRequest request, Long userId) {
+        Long orgId = findOrgId(userId, true);
+        if (orgId == null || request.getAnimalId() == null) {
+            return null;
+        }
+        Integer count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(1) FROM ap_animal a " +
+                        "JOIN ap_rescue_task rt ON a.rescue_task_id = rt.id " +
+                        "WHERE a.id = ? AND rt.rescue_org_id = ? AND a.deleted_at IS NULL " +
+                        "AND a.status IN ('TREATED','READY_FOR_ADOPTION')",
+                Integer.class,
+                request.getAnimalId(),
+                orgId
+        );
+        if (count == null || count == 0) {
+            return null;
+        }
+        String sql = "INSERT INTO ap_adoption_listing (animal_id, rescue_org_id, title, description, status, published_at, created_at, updated_at) " +
+                "VALUES (?, ?, ?, ?, 'OPEN', NOW(3), NOW(3), NOW(3))";
+        KeyHolder keyHolder = new GeneratedKeyHolder();
+        jdbcTemplate.update(con -> {
+            PreparedStatement ps = con.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS);
+            ps.setLong(1, request.getAnimalId());
+            ps.setLong(2, orgId);
+            ps.setString(3, request.getTitle());
+            ps.setString(4, request.getDescription());
+            return ps;
+        }, keyHolder);
+        Long listingId = keyHolder.getKey().longValue();
+        saveAttachments("ADOPTION_LISTING", listingId, request.getAttachments(), userId);
+        jdbcTemplate.update("UPDATE ap_animal SET status = 'READY_FOR_ADOPTION', updated_at = NOW(3) WHERE id = ?",
+                request.getAnimalId());
+        jdbcTemplate.update("INSERT INTO ap_event_timeline (event_id, node_type, content, operator_role, operator_user_id, created_at) " +
+                        "VALUES ((SELECT event_id FROM ap_rescue_task WHERE id = (SELECT rescue_task_id FROM ap_animal WHERE id = ?)), '领养发布', ?, 'RESCUE', ?, NOW(3))",
+                request.getAnimalId(), "已发布领养", userId);
+        return listingId;
+    }
+
+    public void deleteAdoptionListing(Long listingId, Long userId) {
+        Long orgId = findOrgId(userId, true);
+        if (orgId == null) {
+            return;
+        }
+        jdbcTemplate.update(
+                "UPDATE ap_adoption_listing SET status = 'OFFLINE', deleted_at = NOW(3), updated_at = NOW(3) " +
+                        "WHERE id = ? AND rescue_org_id = ? AND status = 'OPEN'",
+                listingId, orgId
+        );
+    }
+
+    public Long sendFollowupTask(Long adoptionId, Long userId) {
+        Long orgId = findOrgId(userId, true);
+        if (orgId == null || adoptionId == null) {
+            return null;
+        }
+        Integer count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(1) FROM ap_adoption a " +
+                        "JOIN ap_animal an ON a.animal_id = an.id " +
+                        "JOIN ap_rescue_task rt ON an.rescue_task_id = rt.id " +
+                        "WHERE a.id = ? AND rt.rescue_org_id = ?",
+                Integer.class,
+                adoptionId, orgId
+        );
+        if (count == null || count == 0) {
+            return null;
+        }
+        List<Map<String, Object>> exists = jdbcTemplate.queryForList(
+                "SELECT id FROM ap_follow_up_task WHERE adoption_id = ?",
+                adoptionId
+        );
+        if (!exists.isEmpty()) {
+            Object id = exists.get(0).get("id");
+            return id instanceof Number ? ((Number) id).longValue() : null;
+        }
+        String template = "{\"title\":\"领养回访问卷\",\"questions\":["
+                + "{\"key\":\"health\",\"label\":\"当前健康状况如何？\",\"type\":\"text\"},"
+                + "{\"key\":\"diet\",\"label\":\"日常喂养情况\",\"type\":\"text\"},"
+                + "{\"key\":\"environment\",\"label\":\"居住环境（室内/室外）\",\"type\":\"select\",\"options\":[\"室内\",\"室外\",\"混合\"]},"
+                + "{\"key\":\"sterilized\",\"label\":\"是否已绝育/免疫\",\"type\":\"select\",\"options\":[\"已完成\",\"进行中\",\"未完成\"]},"
+                + "{\"key\":\"behavior\",\"label\":\"行为表现与适应情况\",\"type\":\"text\"},"
+                + "{\"key\":\"support\",\"label\":\"是否需要进一步支持\",\"type\":\"select\",\"options\":[\"需要\",\"不需要\"]}"
+                + "]}";
+        jdbcTemplate.update(
+                "INSERT INTO ap_follow_up_task (adoption_id, status, questionnaire_template, sent_at, created_at, updated_at) " +
+                        "VALUES (?, 'PENDING', ?, NOW(3), NOW(3), NOW(3))",
+                adoptionId, template
+        );
+        Long taskId = jdbcTemplate.queryForObject(
+                "SELECT id FROM ap_follow_up_task WHERE adoption_id = ? ORDER BY id DESC LIMIT 1",
+                Long.class,
+                adoptionId
+        );
+        Long applicantUserId = jdbcTemplate.queryForObject(
+                "SELECT applicant_user_id FROM ap_adoption WHERE id = ?",
+                Long.class,
+                adoptionId
+        );
+        jdbcTemplate.update(
+                "INSERT INTO ap_message (user_id, msg_type, title, content, ref_type, ref_id, created_at) " +
+                        "VALUES (?, 'FOLLOW_UP', ?, ?, 'FOLLOW_UP_TASK', ?, NOW(3))",
+                applicantUserId,
+                "领养回访",
+                "救助机构已发送回访问卷，请及时填写。",
+                taskId
+        );
+        jdbcTemplate.update("INSERT INTO ap_event_timeline (event_id, node_type, content, operator_role, operator_user_id, created_at) " +
+                        "VALUES ((SELECT event_id FROM ap_rescue_task WHERE id = (SELECT rescue_task_id FROM ap_animal WHERE id = (SELECT animal_id FROM ap_adoption WHERE id = ?))), " +
+                        "'回访', ?, 'RESCUE', ?, NOW(3))",
+                adoptionId, "已发送回访问卷", userId);
+        return taskId;
+    }
+
+    public Map<String, Object> followupDetail(Long adoptionId, Long userId) {
+        Long orgId = findOrgId(userId, true);
+        if (orgId == null || adoptionId == null) {
+            return java.util.Collections.emptyMap();
+        }
+        Integer count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(1) FROM ap_adoption a " +
+                        "JOIN ap_animal an ON a.animal_id = an.id " +
+                        "JOIN ap_rescue_task rt ON an.rescue_task_id = rt.id " +
+                        "WHERE a.id = ? AND rt.rescue_org_id = ?",
+                Integer.class,
+                adoptionId, orgId
+        );
+        if (count == null || count == 0) {
+            return java.util.Collections.emptyMap();
+        }
+        List<Map<String, Object>> taskRows = jdbcTemplate.queryForList(
+                "SELECT t.id AS task_id, t.status AS task_status, t.questionnaire_template, t.sent_at, t.submitted_at " +
+                        "FROM ap_follow_up_task t WHERE t.adoption_id = ?",
+                adoptionId
+        );
+        if (taskRows.isEmpty()) {
+            return java.util.Collections.emptyMap();
+        }
+        Map<String, Object> detail = taskRows.get(0);
+        List<Map<String, Object>> followups = jdbcTemplate.queryForList(
+                "SELECT id, questionnaire, submitted_at FROM ap_follow_up WHERE adoption_id = ? ORDER BY submitted_at DESC LIMIT 1",
+                adoptionId
+        );
+        if (!followups.isEmpty()) {
+            Map<String, Object> answer = followups.get(0);
+            Object followupId = answer.get("id");
+            if (followupId instanceof Number) {
+                answer.put("attachments", listAttachmentUrls("FOLLOW_UP", ((Number) followupId).longValue()));
+            } else {
+                answer.put("attachments", java.util.Collections.emptyList());
+            }
+            detail.put("answer", answer);
+        }
+        return detail;
+    }
+
     private boolean isOrgAdmin(Long userId, String orgType) {
         if (userId == null) {
             return false;
@@ -738,6 +956,32 @@ public class RescueService {
                 vehicleId
         );
         return count == null || count == 0;
+    }
+
+    private void saveAttachments(String bizType, Long bizId, java.util.List<String> urls, Long uploaderUserId) {
+        if (urls == null || urls.isEmpty()) {
+            return;
+        }
+        for (String url : urls) {
+            jdbcTemplate.update("INSERT INTO ap_attachment (biz_type, biz_id, file_url, uploader_user_id, created_at) VALUES (?, ?, ?, ?, NOW(3))",
+                    bizType, bizId, url, uploaderUserId);
+        }
+    }
+
+    private java.util.List<String> listAttachmentUrls(String bizType, Long bizId) {
+        List<Map<String, Object>> attachments = jdbcTemplate.queryForList(
+                "SELECT file_url FROM ap_attachment WHERE biz_type = ? AND biz_id = ? ORDER BY created_at ASC",
+                bizType,
+                bizId
+        );
+        java.util.List<String> urls = new java.util.ArrayList<>();
+        for (Map<String, Object> row : attachments) {
+            Object url = row.get("file_url");
+            if (url != null) {
+                urls.add(url.toString());
+            }
+        }
+        return urls;
     }
 
     private String normalizeDateTime(String value) {

@@ -41,6 +41,13 @@ export const getLawPatrolReport = (id) => http.get(`/law/patrol-reports/${id}`);
 export const listRescueVolunteerReports = (params) => http.get("/rescue/volunteer-reports", { params });
 export const getRescueVolunteerReport = (id) => http.get(`/rescue/volunteer-reports/${id}`);
 
+export const listAdoptionListings = (params) => http.get("/adoption-listings", { params });
+export const getAdoptionListing = (id) => http.get(`/adoption-listings/${id}`);
+export const applyAdoption = (id, payload) => http.post(`/adoption-listings/${id}/apply`, payload);
+export const listMyAdoptions = () => http.get("/adoptions/my");
+export const listFollowupTasks = (params) => http.get("/followup-tasks", { params });
+export const getFollowupTask = (id) => http.get(`/followup-tasks/${id}`);
+export const submitFollowupTask = (id, payload) => http.post(`/followup-tasks/${id}/submit`, payload);
 export const listAnimals = (params) => http.get("/animals", { params });
 export const createAdoption = (payload) => http.post("/adoptions", payload);
 export const listFollowups = (params) => http.get("/followups", { params });
@@ -99,6 +106,12 @@ export const addInventoryTxn = (payload) => http.post("/rescue/inventory/txns", 
 export const listInventoryTxns = (itemId) => http.get("/rescue/inventory/txns", { params: { itemId } });
 export const listInventoryAlerts = () => http.get("/rescue/inventory/alerts");
 export const deleteInventoryItem = (id) => http.delete(`/rescue/inventory/items/${id}`);
+
+export const listRescueAdoptionListings = (params) => http.get("/rescue/adoption-listings", { params });
+export const createRescueAdoptionListing = (payload) => http.post("/rescue/adoption-listings", payload);
+export const deleteRescueAdoptionListing = (id) => http.delete(`/rescue/adoption-listings/${id}`);
+export const sendRescueFollowup = (adoptionId) => http.post(`/rescue/adoptions/${adoptionId}/followup`);
+export const getRescueFollowupDetail = (adoptionId) => http.get(`/rescue/adoptions/${adoptionId}/followup-detail`);
 
 export const listOrganizations = () => http.get("/admin/organizations");
 export const createOrganization = (payload) => http.post("/admin/organizations", payload);

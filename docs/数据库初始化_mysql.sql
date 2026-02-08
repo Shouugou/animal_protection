@@ -508,6 +508,36 @@ CREATE TABLE IF NOT EXISTS `ap_follow_up` (
   KEY `idx_fu_due` (`due_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='回访记录（附件见 ap_attachment）';
 
+CREATE TABLE IF NOT EXISTS `ap_adoption_listing` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `animal_id` BIGINT UNSIGNED NOT NULL,
+  `rescue_org_id` BIGINT UNSIGNED NOT NULL,
+  `title` VARCHAR(128) NOT NULL,
+  `description` TEXT DEFAULT NULL,
+  `status` VARCHAR(16) NOT NULL DEFAULT 'OPEN' COMMENT 'OPEN/ADOPTED/OFFLINE',
+  `published_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `updated_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  `deleted_at` DATETIME(3) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_adl_status_time` (`status`, `published_at`),
+  KEY `idx_adl_org` (`rescue_org_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='领养发布';
+
+CREATE TABLE IF NOT EXISTS `ap_follow_up_task` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `adoption_id` BIGINT UNSIGNED NOT NULL,
+  `status` VARCHAR(16) NOT NULL DEFAULT 'PENDING' COMMENT 'PENDING/SUBMITTED',
+  `questionnaire_template` JSON NOT NULL COMMENT '回访问卷模板',
+  `sent_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `submitted_at` DATETIME(3) DEFAULT NULL,
+  `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `updated_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (`id`),
+  KEY `idx_fut_adoption` (`adoption_id`, `sent_at`),
+  KEY `idx_fut_status` (`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='回访问卷任务';
+
 -- =========================
 -- 6) 公益捐助 & 动保课堂
 -- =========================
