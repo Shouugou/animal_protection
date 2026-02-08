@@ -4,7 +4,11 @@
     <el-table :data="list" v-loading="loading" style="width:100%">
       <el-table-column prop="id" label="ID" width="80" />
       <el-table-column prop="species" label="物种" />
-      <el-table-column prop="status" label="状态" width="180" />
+      <el-table-column label="状态" width="180">
+        <template slot-scope="scope">
+          {{ statusText(scope.row.status) }}
+        </template>
+      </el-table-column>
       <el-table-column label="操作" width="120">
         <template slot-scope="scope">
           <el-button type="primary" size="mini" @click="open(scope.row)">申请领养</el-button>
@@ -45,6 +49,14 @@ export default {
     this.fetch();
   },
   methods: {
+    statusText(status) {
+      return {
+        APPLIED: "已申请",
+        APPROVED: "已通过",
+        REJECTED: "已拒绝",
+        CANCELLED: "已取消"
+      }[status] || status || "未知";
+    },
     async fetch() {
       this.loading = true;
       try {

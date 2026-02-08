@@ -30,7 +30,7 @@
       <el-descriptions :column="2" v-if="detail.id">
         <el-descriptions-item label="任务标题">{{ detail.title }}</el-descriptions-item>
         <el-descriptions-item label="类型">{{ taskTypeText(detail.task_type) }}</el-descriptions-item>
-        <el-descriptions-item label="状态">{{ detail.status || "-" }}</el-descriptions-item>
+        <el-descriptions-item label="状态">{{ statusText(detail.status) }}</el-descriptions-item>
         <el-descriptions-item label="认领人数">{{ claimCount(detail) }}</el-descriptions-item>
         <el-descriptions-item label="地址">{{ detail.address || "-" }}</el-descriptions-item>
         <el-descriptions-item label="开始时间">{{ detail.start_at || "-" }}</el-descriptions-item>
@@ -68,6 +68,13 @@ export default {
     this.fetch();
   },
   methods: {
+    statusText(status) {
+      return {
+        OPEN: "可认领",
+        CLOSED: "已满员",
+        CANCELLED: "已取消"
+      }[status] || status || "未知";
+    },
     taskTypeText(type) {
       return {
         PATROL: "巡护任务",

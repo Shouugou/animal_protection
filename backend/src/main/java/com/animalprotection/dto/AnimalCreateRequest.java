@@ -2,6 +2,7 @@ package com.animalprotection.dto;
 
 public class AnimalCreateRequest {
     private Long rescueTaskId;
+    private String name;
     private String species;
     private String summary;
 
@@ -11,6 +12,14 @@ public class AnimalCreateRequest {
 
     public void setRescueTaskId(Long rescueTaskId) {
         this.rescueTaskId = rescueTaskId;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public void setName(String name) {
+        this.name = name;
     }
 
     public String getSpecies() {

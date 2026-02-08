@@ -27,9 +27,13 @@ public class RescueService {
         Long orgId = findOrgId(userId, false);
         StringBuilder sql = new StringBuilder(
                 "SELECT rt.id, rt.event_id, rt.status, rt.need_rescue, rt.dispatch_note, rt.dispatch_at, rt.arrived_at, rt.intake_at, " +
+                        "rt.assignee_user_id, COALESCE(u.nickname, u.phone) AS assignee_name, " +
+                        "rt.vehicle_id, v.plate_no AS vehicle_plate, v.vehicle_type, " +
                         "e.event_type, e.address, e.latitude, e.longitude, e.reported_at " +
                         "FROM ap_rescue_task rt " +
                         "LEFT JOIN ap_event e ON rt.event_id = e.id " +
+                        "LEFT JOIN ap_user u ON rt.assignee_user_id = u.id " +
+                        "LEFT JOIN ap_rescue_vehicle v ON rt.vehicle_id = v.id " +
                         "WHERE rt.deleted_at IS NULL "
         );
         boolean hasStatus = status != null && !status.trim().isEmpty();
@@ -82,6 +86,10 @@ public class RescueService {
     }
 
     public void evaluate(Long id, RescueEvaluateRequest request, Long userId) {
+        Long orgId = findOrgId(userId, true);
+        if (orgId == null || !belongsToOrg(id, orgId)) {
+            return;
+        }
         boolean need = request.getNeedRescue() != null && request.getNeedRescue();
         jdbcTemplate.update("UPDATE ap_rescue_task SET need_rescue = ?, status = ?, updated_at = NOW(3) WHERE id = ?",
                 need, need ? "DISPATCHING" : "REJECTED", id);
@@ -98,28 +106,81 @@ public class RescueService {
                 id, content, userId);
     }
 
-    public void dispatch(Long id, RescueDispatchRequest request, Long userId) {
-        String status = "DISPATCHING";
-        if (request.getIntake() != null && !request.getIntake().isEmpty()) {
-            status = "INTAKE";
-        } else if (request.getArrive() != null && !request.getArrive().isEmpty()) {
-            status = "ARRIVED";
+    public boolean dispatch(Long id, RescueDispatchRequest request, Long userId) {
+        Long orgId = findOrgId(userId, true);
+        if (orgId == null || !belongsToOrg(id, orgId)) {
+            return false;
         }
-        jdbcTemplate.update("UPDATE ap_rescue_task SET dispatch_note = ?, dispatch_at = ?, arrived_at = ?, intake_at = ?, status = ?, updated_at = NOW(3) WHERE id = ?",
-                request.getNote(), request.getStart(), request.getArrive(), request.getIntake(), status, id);
+        Long assigneeUserId = request.getAssigneeUserId();
+        if (assigneeUserId != null) {
+            Integer count = jdbcTemplate.queryForObject(
+                    "SELECT COUNT(1) FROM ap_user WHERE id = ? AND org_id = ? AND role_code = 'RESCUE' AND deleted_at IS NULL",
+                    Integer.class,
+                    assigneeUserId,
+                    orgId
+            );
+            if (count == null || count == 0) {
+                assigneeUserId = null;
+            }
+        }
+        if (assigneeUserId != null && !assigneeAvailable(orgId, assigneeUserId)) {
+            return false;
+        }
+        Long vehicleId = request.getVehicleId();
+        if (vehicleId != null) {
+            Integer vehicleCount = jdbcTemplate.queryForObject(
+                    "SELECT COUNT(1) FROM ap_rescue_vehicle WHERE id = ? AND org_id = ? AND deleted_at IS NULL",
+                    Integer.class,
+                    vehicleId,
+                    orgId
+            );
+            if (vehicleCount == null || vehicleCount == 0) {
+                vehicleId = null;
+            }
+        }
+        if (vehicleId != null && !vehicleAvailable(orgId, vehicleId)) {
+            return false;
+        }
+        String status;
+        String nodeType;
+        String content;
+        String startAt = normalizeDateTime(request.getStart());
+        String arriveAt = normalizeDateTime(request.getArrive());
+        String intakeAt = normalizeDateTime(request.getIntake());
+        if (intakeAt != null && !intakeAt.isEmpty()) {
+            status = "INTAKE";
+            nodeType = "入站";
+            content = "已入站";
+            jdbcTemplate.update("UPDATE ap_rescue_task SET intake_at = ?, status = ?, updated_at = NOW(3) WHERE id = ?",
+                    intakeAt, status, id);
+        } else if (arriveAt != null && !arriveAt.isEmpty()) {
+            status = "ARRIVED";
+            nodeType = "到达";
+            content = "已到达现场";
+            jdbcTemplate.update("UPDATE ap_rescue_task SET arrived_at = ?, status = ?, updated_at = NOW(3) WHERE id = ?",
+                    arriveAt, status, id);
+        } else {
+            status = "DEPARTED";
+            nodeType = "出发";
+            content = request.getNote() == null || request.getNote().trim().isEmpty() ? "救助已出发" : request.getNote();
+            jdbcTemplate.update("UPDATE ap_rescue_task SET assignee_user_id = ?, vehicle_id = ?, dispatch_note = ?, dispatch_at = ?, status = ?, updated_at = NOW(3) WHERE id = ?",
+                    assigneeUserId, vehicleId, request.getNote(), startAt, status, id);
+        }
         jdbcTemplate.update("INSERT INTO ap_event_timeline (event_id, node_type, content, operator_role, operator_user_id, created_at) " +
-                        "VALUES ((SELECT event_id FROM ap_rescue_task WHERE id = ?), '救助调度', ?, 'RESCUE', ?, NOW(3))",
-                id, request.getNote() == null || request.getNote().trim().isEmpty() ? "救助调度处理中" : request.getNote(), userId);
+                        "VALUES ((SELECT event_id FROM ap_rescue_task WHERE id = ?), ?, ?, 'RESCUE', ?, NOW(3))",
+                id, nodeType, content, userId);
+        return true;
     }
 
     public Long createAnimal(AnimalCreateRequest request, Long userId) {
-        String sql = "INSERT INTO ap_animal (rescue_task_id, species, health_summary, status, created_at, updated_at) VALUES (?, ?, ?, 'IN_CARE', NOW(3), NOW(3))";
+        String sql = "INSERT INTO ap_animal (rescue_task_id, name, species, health_summary, status, created_at, updated_at) VALUES (?, ?, ?, ?, 'IN_CARE', NOW(3), NOW(3))";
         KeyHolder keyHolder = new GeneratedKeyHolder();
         jdbcTemplate.update(con -> {
             PreparedStatement ps = con.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS);
             ps.setLong(1, request.getRescueTaskId());
-            ps.setString(2, request.getSpecies());
-            ps.setString(3, request.getSummary());
+            ps.setString(2, request.getName());
+            ps.setString(3, request.getSpecies());
+            ps.setString(4, request.getSummary());
             return ps;
         }, keyHolder);
         jdbcTemplate.update("INSERT INTO ap_event_timeline (event_id, node_type, content, operator_role, operator_user_id, created_at) " +
@@ -131,13 +192,13 @@ public class RescueService {
     public List<Map<String, Object>> animals(Long userId) {
         Long orgId = findOrgId(userId, false);
         if (orgId == null) {
-            return jdbcTemplate.queryForList(
-                    "SELECT a.id, a.rescue_task_id, a.species, a.status, a.health_summary, a.created_at " +
-                            "FROM ap_animal a ORDER BY a.created_at DESC"
-            );
+        return jdbcTemplate.queryForList(
+                "SELECT a.id, a.rescue_task_id, a.name, a.species, a.status, a.health_summary, a.created_at " +
+                "FROM ap_animal a ORDER BY a.created_at DESC"
+        );
         }
         return jdbcTemplate.queryForList(
-                "SELECT a.id, a.rescue_task_id, a.species, a.status, a.health_summary, a.created_at " +
+                "SELECT a.id, a.rescue_task_id, a.name, a.species, a.status, a.health_summary, a.created_at " +
                         "FROM ap_animal a " +
                         "WHERE a.rescue_task_id IN (SELECT id FROM ap_rescue_task WHERE rescue_org_id = ?) " +
                         "ORDER BY a.created_at DESC",
@@ -292,6 +353,263 @@ public class RescueService {
             }
         }
         return ensureDefault ? findDefaultRescueOrgId() : null;
+    }
+
+    public List<Map<String, Object>> employees(Long userId) {
+        Long orgId = findOrgId(userId, true);
+        if (!isOrgAdmin(userId, "RESCUE")) {
+            return java.util.Collections.emptyList();
+        }
+        return jdbcTemplate.queryForList(
+                "SELECT id, phone, nickname, status, created_at FROM ap_user " +
+                        "WHERE role_code = 'RESCUE' AND org_id = ? AND deleted_at IS NULL ORDER BY id ASC",
+                orgId
+        );
+    }
+
+    public List<Map<String, Object>> assignees(Long userId) {
+        Long orgId = findOrgId(userId, true);
+        if (orgId == null) {
+            return java.util.Collections.emptyList();
+        }
+        return jdbcTemplate.queryForList(
+                "SELECT id, phone, nickname FROM ap_user WHERE role_code = 'RESCUE' AND org_id = ? AND status = 1 AND deleted_at IS NULL ORDER BY id ASC",
+                orgId
+        );
+    }
+
+    public List<Map<String, Object>> availableAssignees(Long userId) {
+        Long orgId = findOrgId(userId, true);
+        if (orgId == null) {
+            return java.util.Collections.emptyList();
+        }
+        return jdbcTemplate.queryForList(
+                "SELECT id, phone, nickname FROM ap_user " +
+                        "WHERE role_code = 'RESCUE' AND org_id = ? AND status = 1 AND deleted_at IS NULL " +
+                        "AND id NOT IN (SELECT assignee_user_id FROM ap_rescue_task WHERE rescue_org_id = ? " +
+                        "AND status IN ('DISPATCHING','DEPARTED','ARRIVED') AND assignee_user_id IS NOT NULL AND deleted_at IS NULL) " +
+                        "ORDER BY id ASC",
+                orgId, orgId
+        );
+    }
+
+    public List<Map<String, Object>> vehicles(Long userId) {
+        Long orgId = findOrgId(userId, true);
+        if (orgId == null) {
+            return java.util.Collections.emptyList();
+        }
+        return jdbcTemplate.queryForList(
+                "SELECT id, plate_no, vehicle_type, capacity, status, note, created_at " +
+                        "FROM ap_rescue_vehicle WHERE org_id = ? AND deleted_at IS NULL ORDER BY id ASC",
+                orgId
+        );
+    }
+
+    public List<Map<String, Object>> availableVehicles(Long userId) {
+        Long orgId = findOrgId(userId, true);
+        if (orgId == null) {
+            return java.util.Collections.emptyList();
+        }
+        return jdbcTemplate.queryForList(
+                "SELECT id, plate_no, vehicle_type, capacity, status, note, created_at " +
+                        "FROM ap_rescue_vehicle WHERE org_id = ? AND status = 1 AND deleted_at IS NULL " +
+                        "AND id NOT IN (SELECT vehicle_id FROM ap_rescue_task WHERE rescue_org_id = ? " +
+                        "AND status IN ('DISPATCHING','DEPARTED','ARRIVED') AND vehicle_id IS NOT NULL AND deleted_at IS NULL) " +
+                        "ORDER BY id ASC",
+                orgId, orgId
+        );
+    }
+
+    public Long createVehicle(com.animalprotection.dto.RescueVehicleRequest request, Long userId) {
+        Long orgId = findOrgId(userId, true);
+        if (orgId == null) {
+            return null;
+        }
+        jdbcTemplate.update(
+                "INSERT INTO ap_rescue_vehicle (org_id, plate_no, vehicle_type, capacity, status, note, created_at, updated_at) " +
+                        "VALUES (?, ?, ?, ?, ?, ?, NOW(3), NOW(3))",
+                orgId,
+                request.getPlateNo(),
+                request.getVehicleType(),
+                request.getCapacity(),
+                request.getStatus() == null ? 1 : request.getStatus(),
+                request.getNote()
+        );
+        return jdbcTemplate.queryForObject(
+                "SELECT id FROM ap_rescue_vehicle WHERE org_id = ? AND plate_no = ? ORDER BY id DESC LIMIT 1",
+                Long.class,
+                orgId,
+                request.getPlateNo()
+        );
+    }
+
+    public void updateVehicle(Long id, com.animalprotection.dto.RescueVehicleRequest request, Long userId) {
+        Long orgId = findOrgId(userId, true);
+        if (orgId == null) {
+            return;
+        }
+        jdbcTemplate.update(
+                "UPDATE ap_rescue_vehicle SET plate_no = ?, vehicle_type = ?, capacity = ?, status = ?, note = ?, updated_at = NOW(3) " +
+                        "WHERE id = ? AND org_id = ? AND deleted_at IS NULL",
+                request.getPlateNo(),
+                request.getVehicleType(),
+                request.getCapacity(),
+                request.getStatus() == null ? 1 : request.getStatus(),
+                request.getNote(),
+                id,
+                orgId
+        );
+    }
+
+    public void deleteVehicle(Long id, Long userId) {
+        Long orgId = findOrgId(userId, true);
+        if (orgId == null) {
+            return;
+        }
+        jdbcTemplate.update(
+                "UPDATE ap_rescue_vehicle SET deleted_at = NOW(3), updated_at = NOW(3) WHERE id = ? AND org_id = ?",
+                id,
+                orgId
+        );
+    }
+
+    public Long createEmployee(com.animalprotection.dto.EmployeeCreateRequest request, Long userId) {
+        Long orgId = findOrgId(userId, true);
+        if (!isOrgAdmin(userId, "RESCUE")) {
+            return null;
+        }
+        String phone = request.getPhone();
+        String password = request.getPassword() == null ? "123456" : request.getPassword();
+        Integer status = request.getStatus() == null ? 1 : request.getStatus();
+        Integer count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(1) FROM ap_user WHERE phone = ? AND deleted_at IS NULL",
+                Integer.class,
+                phone
+        );
+        if (count != null && count > 0) {
+            return null;
+        }
+        jdbcTemplate.update(
+                "INSERT INTO ap_user (role_code, org_id, phone, password_hash, nickname, status, created_at, updated_at) " +
+                        "VALUES ('RESCUE', ?, ?, ?, ?, ?, NOW(3), NOW(3))",
+                orgId, phone, password, request.getNickname(), status
+        );
+        return jdbcTemplate.queryForObject("SELECT id FROM ap_user WHERE phone = ?", Long.class, phone);
+    }
+
+    public void updateEmployee(Long id, com.animalprotection.dto.EmployeeUpdateRequest request, Long userId) {
+        Long orgId = findOrgId(userId, true);
+        if (!isOrgAdmin(userId, "RESCUE")) {
+            return;
+        }
+        if (request.getPassword() != null && !request.getPassword().trim().isEmpty()) {
+            jdbcTemplate.update(
+                    "UPDATE ap_user SET nickname = ?, password_hash = ?, status = ?, updated_at = NOW(3) " +
+                            "WHERE id = ? AND org_id = ? AND role_code = 'RESCUE' AND deleted_at IS NULL",
+                    request.getNickname(),
+                    request.getPassword(),
+                    request.getStatus() == null ? 1 : request.getStatus(),
+                    id,
+                    orgId
+            );
+        } else {
+            jdbcTemplate.update(
+                    "UPDATE ap_user SET nickname = ?, status = ?, updated_at = NOW(3) " +
+                            "WHERE id = ? AND org_id = ? AND role_code = 'RESCUE' AND deleted_at IS NULL",
+                    request.getNickname(),
+                    request.getStatus() == null ? 1 : request.getStatus(),
+                    id,
+                    orgId
+            );
+        }
+    }
+
+    public void deleteEmployee(Long id, Long userId) {
+        Long orgId = findOrgId(userId, true);
+        if (!isOrgAdmin(userId, "RESCUE")) {
+            return;
+        }
+        jdbcTemplate.update(
+                "UPDATE ap_user SET deleted_at = NOW(3), updated_at = NOW(3) WHERE id = ? AND org_id = ? AND role_code = 'RESCUE'",
+                id, orgId
+        );
+    }
+
+    private boolean isOrgAdmin(Long userId, String orgType) {
+        if (userId == null) {
+            return false;
+        }
+        Long orgId = findOrgId(userId, true);
+        Integer count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(1) FROM ap_organization WHERE id = ? AND org_type = ? AND admin_user_id = ? AND deleted_at IS NULL",
+                Integer.class,
+                orgId,
+                orgType,
+                userId
+        );
+        return count != null && count > 0;
+    }
+
+    private boolean belongsToOrg(Long rescueTaskId, Long orgId) {
+        Integer count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(1) FROM ap_rescue_task WHERE id = ? AND rescue_org_id = ? AND deleted_at IS NULL",
+                Integer.class,
+                rescueTaskId,
+                orgId
+        );
+        return count != null && count > 0;
+    }
+
+    private boolean assigneeAvailable(Long orgId, Long assigneeUserId) {
+        Integer count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(1) FROM ap_rescue_task WHERE rescue_org_id = ? AND assignee_user_id = ? " +
+                        "AND status IN ('DISPATCHING','DEPARTED','ARRIVED') AND deleted_at IS NULL",
+                Integer.class,
+                orgId,
+                assigneeUserId
+        );
+        return count == null || count == 0;
+    }
+
+    private boolean vehicleAvailable(Long orgId, Long vehicleId) {
+        Integer count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(1) FROM ap_rescue_task WHERE rescue_org_id = ? AND vehicle_id = ? " +
+                        "AND status IN ('DISPATCHING','DEPARTED','ARRIVED') AND deleted_at IS NULL",
+                Integer.class,
+                orgId,
+                vehicleId
+        );
+        return count == null || count == 0;
+    }
+
+    private String normalizeDateTime(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        if (trimmed.isEmpty()) {
+            return null;
+        }
+        int tIndex = trimmed.indexOf('T');
+        if (tIndex > 0) {
+            String base = trimmed.substring(0, tIndex);
+            int dotIndex = trimmed.indexOf('.');
+            String timePart = trimmed.substring(tIndex + 1);
+            if (dotIndex > 0) {
+                timePart = trimmed.substring(tIndex + 1, dotIndex);
+            }
+            if (timePart.length() >= 8) {
+                return base + " " + timePart.substring(0, 8);
+            }
+            if (timePart.length() >= 5) {
+                return base + " " + timePart.substring(0, 5) + ":00";
+            }
+            return base + " 00:00:00";
+        }
+        if (trimmed.length() == 10) {
+            return trimmed + " 00:00:00";
+        }
+        return trimmed;
     }
 
     private Long findDefaultRescueOrgId() {

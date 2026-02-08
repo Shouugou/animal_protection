@@ -21,13 +21,15 @@ CREATE TABLE IF NOT EXISTS `ap_organization` (
   `address` VARCHAR(255) DEFAULT NULL,
   `contact_name` VARCHAR(64) DEFAULT NULL,
   `contact_phone` VARCHAR(32) DEFAULT NULL,
+  `admin_user_id` BIGINT UNSIGNED DEFAULT NULL COMMENT '机构管理员账号',
   `status` TINYINT NOT NULL DEFAULT 1 COMMENT '1启用 0禁用',
   `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   `updated_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
   `deleted_at` DATETIME(3) DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `idx_org_type_region` (`org_type`, `region_code`),
-  KEY `idx_org_name` (`name`)
+  KEY `idx_org_name` (`name`),
+  KEY `idx_org_admin` (`admin_user_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='组织（执法/救助/平台）';
 
 CREATE TABLE IF NOT EXISTS `ap_role` (
@@ -329,7 +331,9 @@ CREATE TABLE IF NOT EXISTS `ap_rescue_task` (
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   `event_id` BIGINT UNSIGNED NOT NULL,
   `rescue_org_id` BIGINT UNSIGNED DEFAULT NULL COMMENT '接收后写入救助机构ID',
-  `status` VARCHAR(24) NOT NULL COMMENT 'NEW/GRABBED/DISPATCHING/ARRIVED/INTAKE/TREATING/CLOSED/REJECTED',
+  `assignee_user_id` BIGINT UNSIGNED DEFAULT NULL COMMENT '调度人员/经办人',
+  `vehicle_id` BIGINT UNSIGNED DEFAULT NULL COMMENT '调度车辆',
+  `status` VARCHAR(24) NOT NULL COMMENT 'NEW/GRABBED/DISPATCHING/DEPARTED/ARRIVED/INTAKE/TREATING/CLOSED/REJECTED',
   `need_rescue` TINYINT NOT NULL DEFAULT 1 COMMENT '评估是否救助（流程图判断）',
   `dispatch_note` TEXT DEFAULT NULL COMMENT '调度说明',
   `dispatch_at` DATETIME(3) DEFAULT NULL,
@@ -341,13 +345,32 @@ CREATE TABLE IF NOT EXISTS `ap_rescue_task` (
   `deleted_at` DATETIME(3) DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `idx_rt_event` (`event_id`),
-  KEY `idx_rt_org_status_time` (`rescue_org_id`, `status`, `created_at`)
+  KEY `idx_rt_org_status_time` (`rescue_org_id`, `status`, `created_at`),
+  KEY `idx_rt_assignee` (`assignee_user_id`),
+  KEY `idx_rt_vehicle` (`vehicle_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='救助任务';
+
+CREATE TABLE IF NOT EXISTS `ap_rescue_vehicle` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `org_id` BIGINT UNSIGNED NOT NULL,
+  `plate_no` VARCHAR(32) NOT NULL COMMENT '车牌号',
+  `vehicle_type` VARCHAR(64) DEFAULT NULL COMMENT '车型/用途',
+  `capacity` INT DEFAULT NULL COMMENT '载员/载货能力',
+  `status` TINYINT NOT NULL DEFAULT 1 COMMENT '1可用 0停用',
+  `note` VARCHAR(255) DEFAULT NULL,
+  `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `updated_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  `deleted_at` DATETIME(3) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_vehicle_plate` (`org_id`, `plate_no`),
+  KEY `idx_vehicle_org_status` (`org_id`, `status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='救助车辆';
 
 CREATE TABLE IF NOT EXISTS `ap_animal` (
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   `rescue_task_id` BIGINT UNSIGNED NOT NULL,
   `shelter_no` VARCHAR(64) DEFAULT NULL COMMENT '入站编号',
+  `name` VARCHAR(64) DEFAULT NULL COMMENT '动物名称',
   `species` VARCHAR(32) NOT NULL COMMENT '物种',
   `breed` VARCHAR(64) DEFAULT NULL COMMENT '品种/花色（可选）',
   `sex` VARCHAR(8) DEFAULT NULL COMMENT 'M/F/U',
@@ -641,3 +664,28 @@ INSERT INTO ap_user (role_code, org_id, phone, password_hash, nickname, status, 
 SELECT 'ADMIN', o.id, '13800000004', '123456', '系统管理员', 1, NOW(3), NOW(3)
 FROM ap_organization o WHERE o.org_type='PLATFORM' AND o.name='平台管理中心'
 AND NOT EXISTS (SELECT 1 FROM ap_user WHERE phone='13800000004');
+
+-- 设置机构管理员账号
+UPDATE ap_organization
+SET admin_user_id = (SELECT id FROM ap_user WHERE phone = '13800000002')
+WHERE org_type = 'LAW' AND name = '东城执法队' AND deleted_at IS NULL;
+
+UPDATE ap_organization
+SET admin_user_id = (SELECT id FROM ap_user WHERE phone = '13800000006')
+WHERE org_type = 'LAW' AND name = '西城执法队' AND deleted_at IS NULL;
+
+UPDATE ap_organization
+SET admin_user_id = (SELECT id FROM ap_user WHERE phone = '13800000031')
+WHERE org_type = 'RESCUE' AND name = '爱心救助站' AND deleted_at IS NULL;
+
+UPDATE ap_organization
+SET admin_user_id = (SELECT id FROM ap_user WHERE phone = '13800000032')
+WHERE org_type = 'RESCUE' AND name = '城市动物医院' AND deleted_at IS NULL;
+
+UPDATE ap_organization
+SET admin_user_id = (SELECT id FROM ap_user WHERE phone = '13800000033')
+WHERE org_type = 'RESCUE' AND name = '护佑动物中心' AND deleted_at IS NULL;
+
+UPDATE ap_organization
+SET admin_user_id = (SELECT id FROM ap_user WHERE phone = '13800000004')
+WHERE org_type = 'PLATFORM' AND name = '平台管理中心' AND deleted_at IS NULL;

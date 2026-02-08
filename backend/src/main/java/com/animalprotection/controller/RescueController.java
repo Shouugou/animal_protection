@@ -6,6 +6,7 @@ import com.animalprotection.dto.InventoryTxnRequest;
 import com.animalprotection.dto.MedicalRecordRequest;
 import com.animalprotection.dto.RescueDispatchRequest;
 import com.animalprotection.dto.RescueEvaluateRequest;
+import com.animalprotection.dto.RescueVehicleRequest;
 import com.animalprotection.dto.VolunteerTaskCreateRequest;
 import com.animalprotection.service.PublicService;
 import com.animalprotection.service.RescueService;
@@ -45,7 +46,54 @@ public class RescueController {
     @PostMapping("/tasks/{id}/dispatch")
     public ApiResponse<?> dispatch(@PathVariable Long id, @RequestBody RescueDispatchRequest request) {
         Long userId = com.animalprotection.common.AuthContext.getUserId();
-        rescueService.dispatch(id, request, userId);
+        boolean ok = rescueService.dispatch(id, request, userId);
+        if (!ok) {
+            return ApiResponse.error("调度人员或车辆已被占用");
+        }
+        return ApiResponse.ok(true);
+    }
+
+    @GetMapping("/assignees")
+    public ApiResponse<?> assignees() {
+        Long userId = com.animalprotection.common.AuthContext.getUserId();
+        return ApiResponse.ok(rescueService.assignees(userId));
+    }
+
+    @GetMapping("/assignees/available")
+    public ApiResponse<?> availableAssignees() {
+        Long userId = com.animalprotection.common.AuthContext.getUserId();
+        return ApiResponse.ok(rescueService.availableAssignees(userId));
+    }
+
+    @GetMapping("/vehicles")
+    public ApiResponse<?> vehicles() {
+        Long userId = com.animalprotection.common.AuthContext.getUserId();
+        return ApiResponse.ok(rescueService.vehicles(userId));
+    }
+
+    @GetMapping("/vehicles/available")
+    public ApiResponse<?> availableVehicles() {
+        Long userId = com.animalprotection.common.AuthContext.getUserId();
+        return ApiResponse.ok(rescueService.availableVehicles(userId));
+    }
+
+    @PostMapping("/vehicles")
+    public ApiResponse<?> createVehicle(@RequestBody RescueVehicleRequest request) {
+        Long userId = com.animalprotection.common.AuthContext.getUserId();
+        return ApiResponse.ok(rescueService.createVehicle(request, userId));
+    }
+
+    @PutMapping("/vehicles/{id}")
+    public ApiResponse<?> updateVehicle(@PathVariable Long id, @RequestBody RescueVehicleRequest request) {
+        Long userId = com.animalprotection.common.AuthContext.getUserId();
+        rescueService.updateVehicle(id, request, userId);
+        return ApiResponse.ok(true);
+    }
+
+    @DeleteMapping("/vehicles/{id}")
+    public ApiResponse<?> deleteVehicle(@PathVariable Long id) {
+        Long userId = com.animalprotection.common.AuthContext.getUserId();
+        rescueService.deleteVehicle(id, userId);
         return ApiResponse.ok(true);
     }
 
@@ -150,5 +198,31 @@ public class RescueController {
     public ApiResponse<?> createVolunteerTask(@RequestBody VolunteerTaskCreateRequest request) {
         Long userId = com.animalprotection.common.AuthContext.getUserId();
         return ApiResponse.ok(publicService.createTask("RESCUE_SUPPORT", "RESCUE", userId, request));
+    }
+
+    @GetMapping("/employees")
+    public ApiResponse<?> employees() {
+        Long userId = com.animalprotection.common.AuthContext.getUserId();
+        return ApiResponse.ok(rescueService.employees(userId));
+    }
+
+    @PostMapping("/employees")
+    public ApiResponse<?> createEmployee(@RequestBody com.animalprotection.dto.EmployeeCreateRequest request) {
+        Long userId = com.animalprotection.common.AuthContext.getUserId();
+        return ApiResponse.ok(rescueService.createEmployee(request, userId));
+    }
+
+    @PutMapping("/employees/{id}")
+    public ApiResponse<?> updateEmployee(@PathVariable Long id, @RequestBody com.animalprotection.dto.EmployeeUpdateRequest request) {
+        Long userId = com.animalprotection.common.AuthContext.getUserId();
+        rescueService.updateEmployee(id, request, userId);
+        return ApiResponse.ok(true);
+    }
+
+    @DeleteMapping("/employees/{id}")
+    public ApiResponse<?> deleteEmployee(@PathVariable Long id) {
+        Long userId = com.animalprotection.common.AuthContext.getUserId();
+        rescueService.deleteEmployee(id, userId);
+        return ApiResponse.ok(true);
     }
 }

@@ -58,6 +58,10 @@ export const addLawEvidence = (payload) => http.post("/law/evidence", payload);
 export const saveLawResult = (id, payload) => http.post(`/law/workorders/${id}/result`, payload);
 export const archiveWorkOrder = (id, payload) => http.post(`/law/workorders/${id}/archive`, payload);
 export const listLawAssignees = () => http.get("/law/assignees");
+export const listLawEmployees = () => http.get("/law/employees");
+export const createLawEmployee = (payload) => http.post("/law/employees", payload);
+export const updateLawEmployee = (id, payload) => http.put(`/law/employees/${id}`, payload);
+export const deleteLawEmployee = (id) => http.delete(`/law/employees/${id}`);
 export const listMyWorkOrders = (params) => http.get("/law/my-workorders", { params });
 export const listArchivedWorkOrders = (params) => http.get("/law/archived-workorders", { params });
 
@@ -66,6 +70,17 @@ export const listRescueTasks = (params) => http.get("/rescue/tasks", { params })
 export const grabRescueTask = (id) => http.post(`/rescue/tasks/${id}/grab`);
 export const evaluateRescueTask = (id, payload) => http.post(`/rescue/tasks/${id}/evaluate`, payload);
 export const dispatchRescueTask = (id, payload) => http.post(`/rescue/tasks/${id}/dispatch`, payload);
+export const listRescueAssignees = () => http.get("/rescue/assignees");
+export const listRescueAvailableAssignees = () => http.get("/rescue/assignees/available");
+export const listRescueVehicles = () => http.get("/rescue/vehicles");
+export const listRescueAvailableVehicles = () => http.get("/rescue/vehicles/available");
+export const createRescueVehicle = (payload) => http.post("/rescue/vehicles", payload);
+export const updateRescueVehicle = (id, payload) => http.put(`/rescue/vehicles/${id}`, payload);
+export const deleteRescueVehicle = (id) => http.delete(`/rescue/vehicles/${id}`);
+export const listRescueEmployees = () => http.get("/rescue/employees");
+export const createRescueEmployee = (payload) => http.post("/rescue/employees", payload);
+export const updateRescueEmployee = (id, payload) => http.put(`/rescue/employees/${id}`, payload);
+export const deleteRescueEmployee = (id) => http.delete(`/rescue/employees/${id}`);
 export const listRescueAnimals = () => http.get("/rescue/animals");
 export const createRescueAnimal = (payload) => http.post("/rescue/animals", payload);
 export const listMedicalRecords = (animalId) => http.get("/rescue/medical-records", { params: { animalId } });
@@ -77,3 +92,12 @@ export const addInventoryTxn = (payload) => http.post("/rescue/inventory/txns", 
 export const listInventoryTxns = (itemId) => http.get("/rescue/inventory/txns", { params: { itemId } });
 export const listInventoryAlerts = () => http.get("/rescue/inventory/alerts");
 export const deleteInventoryItem = (id) => http.delete(`/rescue/inventory/items/${id}`);
+
+export const listOrganizations = () => http.get("/admin/organizations");
+export const createOrganization = (payload) => http.post("/admin/organizations", payload);
+export const updateOrganization = (id, payload) => http.put(`/admin/organizations/${id}`, payload);
+export const deleteOrganization = (id) => http.delete(`/admin/organizations/${id}`);
+export const listAdminUsers = (params) => http.get("/admin/users", { params });
+export const createAdminUser = (payload) => http.post("/admin/users", payload);
+export const updateAdminUser = (id, payload) => http.put(`/admin/users/${id}`, payload);
+export const deleteAdminUser = (id) => http.delete(`/admin/users/${id}`);

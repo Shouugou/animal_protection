@@ -6,7 +6,8 @@ const state = {
     role_code: "PUBLIC",
     user_id: 0,
     org_id: null,
-    name: ""
+    name: "",
+    is_org_admin: false
   },
   permCodes: []
 };
@@ -22,7 +23,7 @@ const mutations = {
   },
   CLEAR_AUTH(state) {
     state.token = "";
-    state.profile = { role_code: "PUBLIC", user_id: 0, org_id: null, name: "" };
+    state.profile = { role_code: "PUBLIC", user_id: 0, org_id: null, name: "", is_org_admin: false };
     state.permCodes = [];
   }
 };

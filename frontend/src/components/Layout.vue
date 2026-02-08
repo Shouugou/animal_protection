@@ -41,6 +41,9 @@ export default {
         ADMIN: "系统管理员端"
       }[this.roleCode] || "平台";
     },
+    isOrgAdmin() {
+      return !!this.$store.state.auth.profile.is_org_admin;
+    },
     userName() {
       return this.$store.state.auth.profile.name || "用户";
     },
@@ -61,20 +64,25 @@ export default {
           { label: "工单列表", path: "/law/workorders" },
           { label: "我的任务", path: "/law/my-tasks" },
           { label: "志愿任务", path: "/law/volunteer-tasks" },
-          { label: "归档案件", path: "/law/archives" }
+          { label: "归档案件", path: "/law/archives" },
+          ...(this.isOrgAdmin ? [{ label: "员工管理", path: "/law/employees" }] : [])
         ],
         RESCUE: [
           { label: "救助任务", path: "/rescue/tasks" },
           { label: "志愿任务", path: "/rescue/volunteer-tasks" },
+          { label: "车辆管理", path: "/rescue/vehicles" },
           { label: "动物档案", path: "/rescue/animals" },
-          { label: "治疗记录", path: "/rescue/animals/1/records" },
-          { label: "库存管理", path: "/rescue/inventory" }
+          { label: "治疗记录", path: "/rescue/medical-records" },
+          { label: "库存管理", path: "/rescue/inventory" },
+          ...(this.isOrgAdmin ? [{ label: "员工管理", path: "/rescue/employees" }] : [])
         ],
         ADMIN: [
           { label: "数据监控", path: "/admin/dashboard" },
           { label: "统计报表", path: "/admin/reports" },
           { label: "权限配置", path: "/admin/acl" },
-          { label: "审核管理", path: "/admin/approvals" }
+          { label: "审核管理", path: "/admin/approvals" },
+          { label: "机构管理", path: "/admin/organizations" },
+          { label: "账号管理", path: "/admin/users" }
         ]
       };
       return [...roleMenus[this.roleCode] || [], ...common];

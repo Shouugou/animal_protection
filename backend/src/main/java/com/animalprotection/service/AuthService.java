@@ -45,6 +45,12 @@ public class AuthService {
         profile.put("org_id", user.get("org_id"));
         profile.put("name", user.get("nickname") != null ? user.get("nickname") : user.get("phone"));
         profile.put("is_volunteer", user.get("is_volunteer"));
+        Integer adminCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(1) FROM ap_organization WHERE admin_user_id = ? AND deleted_at IS NULL",
+                Integer.class,
+                userId
+        );
+        profile.put("is_org_admin", adminCount != null && adminCount > 0);
         data.put("profile", profile);
         data.put("permCodes", new java.util.ArrayList<>());
         return data;

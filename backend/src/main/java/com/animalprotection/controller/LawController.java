@@ -24,12 +24,14 @@ public class LawController {
 
     @GetMapping("/workorders")
     public ApiResponse<?> list(@RequestParam(required = false) String status) {
-        return ApiResponse.ok(lawService.workOrders(status));
+        Long userId = com.animalprotection.common.AuthContext.getUserId();
+        return ApiResponse.ok(lawService.workOrders(status, userId));
     }
 
     @GetMapping("/workorders/{id}")
     public ApiResponse<?> detail(@PathVariable Long id) {
-        return ApiResponse.ok(lawService.workOrderDetail(id));
+        Long userId = com.animalprotection.common.AuthContext.getUserId();
+        return ApiResponse.ok(lawService.workOrderDetail(id, userId));
     }
 
     @PostMapping("/workorders/{id}/accept")
@@ -41,7 +43,8 @@ public class LawController {
 
     @PostMapping("/workorders/{id}/assign")
     public ApiResponse<?> assign(@PathVariable Long id, @RequestBody WorkOrderAssignRequest request) {
-        lawService.assign(id, request);
+        Long userId = com.animalprotection.common.AuthContext.getUserId();
+        lawService.assign(id, request, userId);
         return ApiResponse.ok(true);
     }
 
@@ -73,7 +76,8 @@ public class LawController {
 
     @GetMapping("/assignees")
     public ApiResponse<?> assignees() {
-        return ApiResponse.ok(lawService.availableAssignees());
+        Long userId = com.animalprotection.common.AuthContext.getUserId();
+        return ApiResponse.ok(lawService.availableAssignees(userId));
     }
 
     @GetMapping("/my-workorders")
@@ -87,7 +91,8 @@ public class LawController {
 
     @GetMapping("/archived-workorders")
     public ApiResponse<?> archived(@RequestParam(required = false) String status) {
-        return ApiResponse.ok(lawService.archivedWorkOrders(status));
+        Long userId = com.animalprotection.common.AuthContext.getUserId();
+        return ApiResponse.ok(lawService.archivedWorkOrders(status, userId));
     }
 
     @GetMapping("/patrol-reports")
@@ -125,5 +130,31 @@ public class LawController {
     public ApiResponse<?> createVolunteerTask(@RequestBody VolunteerTaskCreateRequest request) {
         Long userId = com.animalprotection.common.AuthContext.getUserId();
         return ApiResponse.ok(publicService.createTask("PATROL", "LAW", userId, request));
+    }
+
+    @GetMapping("/employees")
+    public ApiResponse<?> employees() {
+        Long userId = com.animalprotection.common.AuthContext.getUserId();
+        return ApiResponse.ok(lawService.employees(userId));
+    }
+
+    @PostMapping("/employees")
+    public ApiResponse<?> createEmployee(@RequestBody com.animalprotection.dto.EmployeeCreateRequest request) {
+        Long userId = com.animalprotection.common.AuthContext.getUserId();
+        return ApiResponse.ok(lawService.createEmployee(request, userId));
+    }
+
+    @PutMapping("/employees/{id}")
+    public ApiResponse<?> updateEmployee(@PathVariable Long id, @RequestBody com.animalprotection.dto.EmployeeUpdateRequest request) {
+        Long userId = com.animalprotection.common.AuthContext.getUserId();
+        lawService.updateEmployee(id, request, userId);
+        return ApiResponse.ok(true);
+    }
+
+    @DeleteMapping("/employees/{id}")
+    public ApiResponse<?> deleteEmployee(@PathVariable Long id) {
+        Long userId = com.animalprotection.common.AuthContext.getUserId();
+        lawService.deleteEmployee(id, userId);
+        return ApiResponse.ok(true);
     }
 }

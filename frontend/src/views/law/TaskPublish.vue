@@ -12,7 +12,11 @@
 
       <el-table v-if="activeTab === 'tasks'" :data="list" v-loading="loading" style="width:100%">
         <el-table-column prop="title" label="任务标题" />
-        <el-table-column prop="status" label="状态" width="120" />
+        <el-table-column label="状态" width="120">
+          <template slot-scope="scope">
+            {{ statusText(scope.row.status) }}
+          </template>
+        </el-table-column>
         <el-table-column label="认领情况" width="140">
           <template slot-scope="scope">
             {{ claimCount(scope.row) }}
@@ -88,7 +92,7 @@
       <el-descriptions :column="2" v-if="detail.id">
         <el-descriptions-item label="任务标题">{{ detail.title }}</el-descriptions-item>
         <el-descriptions-item label="类型">{{ detail.task_type }}</el-descriptions-item>
-        <el-descriptions-item label="状态">{{ detail.status }}</el-descriptions-item>
+        <el-descriptions-item label="状态">{{ statusText(detail.status) }}</el-descriptions-item>
         <el-descriptions-item label="认领人数">{{ detail.max_claims }}</el-descriptions-item>
         <el-descriptions-item label="地址">{{ detail.address || "-" }}</el-descriptions-item>
         <el-descriptions-item label="开始时间">{{ detail.start_at || "-" }}</el-descriptions-item>
@@ -173,6 +177,13 @@ export default {
     this.fetch();
   },
   methods: {
+    statusText(status) {
+      return {
+        OPEN: "可认领",
+        CLOSED: "已满员",
+        CANCELLED: "已取消"
+      }[status] || status || "未知";
+    },
     onPick(payload) {
       this.form.address = payload.address || "";
       this.form.latitude = payload.latitude || "";

@@ -6,6 +6,7 @@
       <el-tab-pane label="待接收" name="NEW" />
       <el-tab-pane label="待评估" name="GRABBED" />
       <el-tab-pane label="待调度" name="DISPATCHING" />
+      <el-tab-pane label="已出发" name="DEPARTED" />
       <el-tab-pane label="已到达" name="ARRIVED" />
       <el-tab-pane label="已入站" name="INTAKE" />
       <el-tab-pane label="不救助" name="REJECTED" />
@@ -15,6 +16,12 @@
       <el-table-column prop="event_id" label="事件ID" width="100" />
       <el-table-column prop="event_type" label="事件类型" />
       <el-table-column prop="address" label="地址" />
+      <el-table-column prop="assignee_name" label="调度人员" width="140" />
+      <el-table-column label="调度车辆" width="160">
+        <template slot-scope="scope">
+          {{ scope.row.vehicle_plate || "-" }}
+        </template>
+      </el-table-column>
       <el-table-column label="状态" width="140">
         <template slot-scope="scope">
           {{ statusText(scope.row.status) }}
@@ -25,7 +32,7 @@
           <span style="white-space:nowrap">{{ formatTime(scope.row.reported_at) }}</span>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="320">
+      <el-table-column label="操作" width="360">
         <template slot-scope="scope">
           <el-button
             v-if="scope.row.status === 'NEW'"
@@ -44,6 +51,23 @@
             type="primary"
             @click="dispatch(scope.row)"
           >调度</el-button>
+          <el-button
+            v-if="scope.row.status === 'DEPARTED'"
+            size="mini"
+            type="primary"
+            @click="markArrived(scope.row)"
+          >到达</el-button>
+          <el-button
+            v-if="scope.row.status === 'ARRIVED'"
+            size="mini"
+            type="primary"
+            @click="markIntake(scope.row)"
+          >入站</el-button>
+          <el-button
+            v-if="scope.row.status === 'INTAKE'"
+            size="mini"
+            @click="createAnimal(scope.row)"
+          >建档</el-button>
           <el-button
             v-if="scope.row.status === 'DISPATCHING'"
             size="mini"
@@ -72,24 +96,62 @@
       </span>
     </el-dialog>
 
-    <el-dialog title="救助调度" :visible.sync="showDispatch" width="520px">
+    <el-dialog title="救助调度" :visible.sync="showDispatch" width="560px">
       <el-form label-width="90px">
+        <el-form-item label="调度人员">
+          <el-select v-model="dispatchForm.assignee_user_id" placeholder="选择调度人员">
+            <el-option
+              v-for="item in assignees"
+              :key="item.id"
+              :label="item.nickname || item.phone"
+              :value="item.id"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="调度车辆">
+          <el-select v-model="dispatchForm.vehicle_id" placeholder="选择调度车辆">
+            <el-option
+              v-for="item in vehicles"
+              :key="item.id"
+              :label="`${item.plate_no} ${item.vehicle_type || ''}`"
+              :value="item.id"
+            />
+          </el-select>
+        </el-form-item>
         <el-form-item label="调度说明">
           <el-input type="textarea" v-model="dispatchForm.note" rows="3" />
         </el-form-item>
         <el-form-item label="出发时间">
           <el-date-picker v-model="dispatchForm.start" type="datetime" />
         </el-form-item>
-        <el-form-item label="到达时间">
-          <el-date-picker v-model="dispatchForm.arrive" type="datetime" />
-        </el-form-item>
-        <el-form-item label="入站时间">
-          <el-date-picker v-model="dispatchForm.intake" type="datetime" />
-        </el-form-item>
       </el-form>
       <span slot="footer">
         <el-button @click="showDispatch=false">取消</el-button>
         <el-button type="primary" :loading="saving" @click="saveDispatch">保存</el-button>
+      </span>
+    </el-dialog>
+
+    <el-dialog title="标记到达" :visible.sync="showArrive" width="420px">
+      <el-form label-width="90px">
+        <el-form-item label="到达时间">
+          <el-date-picker v-model="arriveForm.arrive" type="datetime" />
+        </el-form-item>
+      </el-form>
+      <span slot="footer">
+        <el-button @click="showArrive=false">取消</el-button>
+        <el-button type="primary" :loading="saving" @click="saveArrive">保存</el-button>
+      </span>
+    </el-dialog>
+
+    <el-dialog title="标记入站" :visible.sync="showIntake" width="420px">
+      <el-form label-width="90px">
+        <el-form-item label="入站时间">
+          <el-date-picker v-model="intakeForm.intake" type="datetime" />
+        </el-form-item>
+      </el-form>
+      <span slot="footer">
+        <el-button @click="showIntake=false">取消</el-button>
+        <el-button type="primary" :loading="saving" @click="saveIntake">保存</el-button>
       </span>
     </el-dialog>
 
@@ -167,7 +229,16 @@
 </template>
 
 <script>
-import { listRescueTasks, grabRescueTask, evaluateRescueTask, dispatchRescueTask, getEvent, createRescueVolunteerTask } from "@/api";
+import {
+  listRescueTasks,
+  grabRescueTask,
+  evaluateRescueTask,
+  dispatchRescueTask,
+  listRescueAvailableAssignees,
+  listRescueAvailableVehicles,
+  getEvent,
+  createRescueVolunteerTask
+} from "@/api";
 import MapViewer from "@/components/MapViewer.vue";
 
 export default {
@@ -181,12 +252,18 @@ export default {
       activeTab: "ALL",
       showEval: false,
       showDispatch: false,
+      showArrive: false,
+      showIntake: false,
       showVolunteer: false,
       currentId: null,
+      assignees: [],
+      vehicles: [],
       detailDialog: { visible: false },
       detail: {},
       evalForm: { need_rescue: true, note: "" },
-      dispatchForm: { note: "", start: "", arrive: "", intake: "" },
+      dispatchForm: { assignee_user_id: null, vehicle_id: null, note: "", start: "" },
+      arriveForm: { arrive: "" },
+      intakeForm: { intake: "" },
       volunteerForm: {
         title: "",
         description: "",
@@ -219,10 +296,11 @@ export default {
         NEW: "待接收",
         GRABBED: "待评估",
         DISPATCHING: "待调度",
+        DEPARTED: "已出发",
         ARRIVED: "已到达",
         INTAKE: "已入站",
         TREATING: "治疗中",
-        CLOSED: "已闭环",
+        CLOSED: "已办结",
         REJECTED: "不救助"
       };
       return map[status] || status || "未知";
@@ -282,8 +360,28 @@ export default {
     },
     dispatch(row) {
       this.currentId = row.id;
-      this.dispatchForm = { note: "", start: "", arrive: "", intake: "" };
+      this.dispatchForm = {
+        assignee_user_id: row.assignee_user_id || null,
+        vehicle_id: row.vehicle_id || null,
+        note: "",
+        start: ""
+      };
+      this.loadAssignees();
+      this.loadVehicles();
       this.showDispatch = true;
+    },
+    markArrived(row) {
+      this.currentId = row.id;
+      this.arriveForm = { arrive: "" };
+      this.showArrive = true;
+    },
+    markIntake(row) {
+      this.currentId = row.id;
+      this.intakeForm = { intake: "" };
+      this.showIntake = true;
+    },
+    createAnimal(row) {
+      this.$router.push({ path: "/rescue/animals", query: { taskId: row.id } });
     },
     openVolunteer(row) {
       const title = `救助协助-${row.event_type || "事件"}-${row.event_id}`;
@@ -319,14 +417,44 @@ export default {
       this.saving = true;
       try {
         const resp = await dispatchRescueTask(this.currentId, {
+          assigneeUserId: this.dispatchForm.assignee_user_id,
+          vehicleId: this.dispatchForm.vehicle_id,
           note: this.dispatchForm.note,
-          start: this.dispatchForm.start,
-          arrive: this.dispatchForm.arrive,
-          intake: this.dispatchForm.intake
+          start: this.dispatchForm.start
         });
         if (resp.code === 0) {
           this.$message.success("调度已保存");
           this.showDispatch = false;
+          this.fetch();
+        }
+      } finally {
+        this.saving = false;
+      }
+    },
+    async saveArrive() {
+      this.saving = true;
+      try {
+        const resp = await dispatchRescueTask(this.currentId, {
+          arrive: this.arriveForm.arrive
+        });
+        if (resp.code === 0) {
+          this.$message.success("已标记到达");
+          this.showArrive = false;
+          this.fetch();
+        }
+      } finally {
+        this.saving = false;
+      }
+    },
+    async saveIntake() {
+      this.saving = true;
+      try {
+        const resp = await dispatchRescueTask(this.currentId, {
+          intake: this.intakeForm.intake
+        });
+        if (resp.code === 0) {
+          this.$message.success("已标记入站");
+          this.showIntake = false;
           this.fetch();
         }
       } finally {
@@ -365,6 +493,18 @@ export default {
       if (resp.code === 0) {
         this.detail = resp.data || {};
         this.detailDialog.visible = true;
+      }
+    },
+    async loadAssignees() {
+      const resp = await listRescueAvailableAssignees();
+      if (resp.code === 0) {
+        this.assignees = resp.data || [];
+      }
+    },
+    async loadVehicles() {
+      const resp = await listRescueAvailableVehicles();
+      if (resp.code === 0) {
+        this.vehicles = (resp.data || []).filter((v) => v.status === 1);
       }
     }
   }
