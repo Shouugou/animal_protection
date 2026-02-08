@@ -52,24 +52,6 @@
       </el-table-column>
     </el-table>
 
-    <el-divider />
-    <el-card>
-      <div slot="header">病历共享</div>
-      <el-form label-width="90px">
-        <el-form-item label="共享对象">
-          <el-select v-model="share.targets" multiple placeholder="选择机构/人员">
-            <el-option label="救助机构A" value="ORG_A" />
-            <el-option label="执法部门B" value="LAW_B" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="共享说明">
-          <el-input type="textarea" v-model="share.note" rows="2" />
-        </el-form-item>
-        <el-form-item>
-          <el-button type="primary" :loading="sharing" @click="shareRecord">发起共享</el-button>
-        </el-form-item>
-      </el-form>
-    </el-card>
   </el-card>
 </template>
 
@@ -77,7 +59,6 @@
 import {
   listMedicalRecords,
   addMedicalRecord,
-  shareMedicalRecord,
   listRescueAnimals,
   listInventoryItems,
   addInventoryTxn
@@ -93,10 +74,8 @@ export default {
       form: { type: "CHECKUP", content: "" },
       medication: { itemId: null, qty: 1 },
       list: [],
-      share: { targets: [], note: "" },
       loading: false,
-      saving: false,
-      sharing: false
+      saving: false
     };
   },
   created() {
@@ -244,23 +223,6 @@ export default {
         this.saving = false;
       }
     },
-    async shareRecord() {
-      this.sharing = true;
-      try {
-        const resp = await shareMedicalRecord({
-          animalId: Number(this.id),
-          targets: this.share.targets,
-          note: this.share.note
-        });
-        if (resp.code === 0) {
-          this.$message.success("共享已发起");
-          this.share.targets = [];
-          this.share.note = "";
-        }
-      } finally {
-        this.sharing = false;
-      }
-    }
   }
 };
 </script>

@@ -9,6 +9,7 @@
       <el-tab-pane label="已出发" name="DEPARTED" />
       <el-tab-pane label="已到达" name="ARRIVED" />
       <el-tab-pane label="已入站" name="INTAKE" />
+      <el-tab-pane label="已建档" name="FILED" />
       <el-tab-pane label="不救助" name="REJECTED" />
     </el-tabs>
     <el-table :data="list" style="width:100%" v-loading="loading">
@@ -299,6 +300,7 @@ export default {
         DEPARTED: "已出发",
         ARRIVED: "已到达",
         INTAKE: "已入站",
+        FILED: "已建档",
         TREATING: "治疗中",
         CLOSED: "已办结",
         REJECTED: "不救助"

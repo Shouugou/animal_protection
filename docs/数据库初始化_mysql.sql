@@ -333,7 +333,7 @@ CREATE TABLE IF NOT EXISTS `ap_rescue_task` (
   `rescue_org_id` BIGINT UNSIGNED DEFAULT NULL COMMENT '接收后写入救助机构ID',
   `assignee_user_id` BIGINT UNSIGNED DEFAULT NULL COMMENT '调度人员/经办人',
   `vehicle_id` BIGINT UNSIGNED DEFAULT NULL COMMENT '调度车辆',
-  `status` VARCHAR(24) NOT NULL COMMENT 'NEW/GRABBED/DISPATCHING/DEPARTED/ARRIVED/INTAKE/TREATING/CLOSED/REJECTED',
+  `status` VARCHAR(24) NOT NULL COMMENT 'NEW/GRABBED/DISPATCHING/DEPARTED/ARRIVED/INTAKE/FILED/TREATING/CLOSED/REJECTED',
   `need_rescue` TINYINT NOT NULL DEFAULT 1 COMMENT '评估是否救助（流程图判断）',
   `dispatch_note` TEXT DEFAULT NULL COMMENT '调度说明',
   `dispatch_at` DATETIME(3) DEFAULT NULL,
@@ -398,6 +398,34 @@ CREATE TABLE IF NOT EXISTS `ap_medical_record` (
   KEY `idx_mr_animal_time` (`animal_id`, `recorded_at`),
   KEY `idx_mr_recorder` (`recorder_user_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='治疗记录（附件见 ap_attachment）';
+
+CREATE TABLE IF NOT EXISTS `ap_case_share` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `animal_id` BIGINT UNSIGNED NOT NULL,
+  `from_org_id` BIGINT UNSIGNED NOT NULL,
+  `to_org_id` BIGINT UNSIGNED NOT NULL,
+  `status` VARCHAR(16) NOT NULL DEFAULT 'ACTIVE' COMMENT 'ACTIVE/CLOSED',
+  `note` VARCHAR(255) DEFAULT NULL COMMENT '共享说明',
+  `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `updated_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  `closed_at` DATETIME(3) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_share_animal` (`animal_id`),
+  KEY `idx_share_from_org` (`from_org_id`, `created_at`),
+  KEY `idx_share_to_org` (`to_org_id`, `created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='病例共享';
+
+CREATE TABLE IF NOT EXISTS `ap_case_share_message` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `share_id` BIGINT UNSIGNED NOT NULL,
+  `sender_org_id` BIGINT UNSIGNED DEFAULT NULL,
+  `sender_user_id` BIGINT UNSIGNED DEFAULT NULL,
+  `content` TEXT NOT NULL,
+  `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (`id`),
+  KEY `idx_share_msg_share` (`share_id`, `created_at`),
+  KEY `idx_share_msg_sender` (`sender_org_id`, `sender_user_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='病例共享交流';
 
 CREATE TABLE IF NOT EXISTS `ap_rescue_support_report` (
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,

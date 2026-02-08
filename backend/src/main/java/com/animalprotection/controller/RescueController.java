@@ -127,6 +127,48 @@ public class RescueController {
         return ApiResponse.ok(true);
     }
 
+    @GetMapping("/organizations")
+    public ApiResponse<?> rescueOrganizations() {
+        Long userId = com.animalprotection.common.AuthContext.getUserId();
+        return ApiResponse.ok(rescueService.rescueOrgs(userId));
+    }
+
+    @PostMapping("/case-shares")
+    public ApiResponse<?> createCaseShare(@RequestBody java.util.Map<String, Object> body) {
+        Long userId = com.animalprotection.common.AuthContext.getUserId();
+        Long animalId = body.get("animalId") == null ? null : ((Number) body.get("animalId")).longValue();
+        Long targetOrgId = body.get("targetOrgId") == null ? null : ((Number) body.get("targetOrgId")).longValue();
+        String note = body.get("note") == null ? null : body.get("note").toString();
+        return ApiResponse.ok(rescueService.createCaseShare(animalId, targetOrgId, note, userId));
+    }
+
+    @GetMapping("/case-shares")
+    public ApiResponse<?> caseShares(@RequestParam(required = false) String direction) {
+        Long userId = com.animalprotection.common.AuthContext.getUserId();
+        return ApiResponse.ok(rescueService.caseShares(userId, direction));
+    }
+
+    @GetMapping("/case-shares/{id}")
+    public ApiResponse<?> caseShareDetail(@PathVariable Long id) {
+        Long userId = com.animalprotection.common.AuthContext.getUserId();
+        return ApiResponse.ok(rescueService.caseShareDetail(id, userId));
+    }
+
+    @PostMapping("/case-shares/{id}/messages")
+    public ApiResponse<?> caseShareMessage(@PathVariable Long id, @RequestBody java.util.Map<String, Object> body) {
+        Long userId = com.animalprotection.common.AuthContext.getUserId();
+        String content = body.get("content") == null ? "" : body.get("content").toString();
+        rescueService.addCaseShareMessage(id, content, userId);
+        return ApiResponse.ok(true);
+    }
+
+    @PostMapping("/case-shares/{id}/close")
+    public ApiResponse<?> closeCaseShare(@PathVariable Long id) {
+        Long userId = com.animalprotection.common.AuthContext.getUserId();
+        rescueService.closeCaseShare(id, userId);
+        return ApiResponse.ok(true);
+    }
+
     @GetMapping("/inventory/items")
     public ApiResponse<?> inventoryItems() {
         Long userId = com.animalprotection.common.AuthContext.getUserId();

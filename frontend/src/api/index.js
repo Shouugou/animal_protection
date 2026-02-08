@@ -77,6 +77,13 @@ export const listRescueAvailableVehicles = () => http.get("/rescue/vehicles/avai
 export const createRescueVehicle = (payload) => http.post("/rescue/vehicles", payload);
 export const updateRescueVehicle = (id, payload) => http.put(`/rescue/vehicles/${id}`, payload);
 export const deleteRescueVehicle = (id) => http.delete(`/rescue/vehicles/${id}`);
+
+export const listRescueOrganizations = () => http.get("/rescue/organizations");
+export const createCaseShare = (payload) => http.post("/rescue/case-shares", payload);
+export const listCaseShares = (params) => http.get("/rescue/case-shares", { params });
+export const getCaseShare = (id) => http.get(`/rescue/case-shares/${id}`);
+export const addCaseShareMessage = (id, payload) => http.post(`/rescue/case-shares/${id}/messages`, payload);
+export const closeCaseShare = (id) => http.post(`/rescue/case-shares/${id}/close`);
 export const listRescueEmployees = () => http.get("/rescue/employees");
 export const createRescueEmployee = (payload) => http.post("/rescue/employees", payload);
 export const updateRescueEmployee = (id, payload) => http.put(`/rescue/employees/${id}`, payload);

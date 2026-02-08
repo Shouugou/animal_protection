@@ -86,12 +86,103 @@
           </template>
         </el-table-column>
       </el-table>
+
+      <el-divider />
+      <el-card>
+        <div slot="header">病例共享</div>
+        <el-form label-width="90px" class="share-form">
+          <el-form-item label="共享机构">
+            <el-select v-model="shareForm.targetOrgId" placeholder="选择救助机构">
+              <el-option
+                v-for="org in shareTargets"
+                :key="org.id"
+                :label="org.name"
+                :value="org.id"
+              />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="共享说明">
+            <el-input v-model="shareForm.note" />
+          </el-form-item>
+          <el-form-item>
+            <el-button type="primary" size="mini" :loading="shareForm.loading" @click="submitShare">
+              发起共享
+            </el-button>
+          </el-form-item>
+        </el-form>
+
+        <el-table :data="detail.shares" v-loading="detail.shareLoading" style="width:100%">
+          <el-table-column prop="to_org_name" label="目标机构" />
+          <el-table-column label="状态" width="120">
+            <template slot-scope="scope">
+              {{ shareStatusText(scope.row.status) }}
+            </template>
+          </el-table-column>
+          <el-table-column label="共享时间" width="240">
+            <template slot-scope="scope">
+              <span class="nowrap">{{ formatTime(scope.row.created_at) }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="200">
+            <template slot-scope="scope">
+              <el-button size="mini" @click="openShare(scope.row)">
+                {{ scope.row.status === "CLOSED" ? "查看交流记录" : "交流" }}
+              </el-button>
+              <el-button
+                size="mini"
+                type="danger"
+                v-if="canCloseShare(scope.row)"
+                @click="closeShare(scope.row)"
+              >结束</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+      </el-card>
+    </el-dialog>
+
+    <el-dialog title="共享交流" :visible.sync="shareDialog.visible" width="720px">
+      <el-descriptions :column="2" v-if="shareDialog.detail.id">
+        <el-descriptions-item label="动物">{{ shareDialog.detail.animal_name || "-" }} / {{ shareDialog.detail.species }}</el-descriptions-item>
+        <el-descriptions-item label="共享状态">{{ shareStatusText(shareDialog.detail.status) }}</el-descriptions-item>
+        <el-descriptions-item label="共享机构">{{ shareDialog.detail.from_org_name }} → {{ shareDialog.detail.to_org_name }}</el-descriptions-item>
+        <el-descriptions-item label="共享说明">{{ shareDialog.detail.note || "-" }}</el-descriptions-item>
+      </el-descriptions>
+
+      <el-card style="margin-top:12px">
+        <div slot="header">交流记录</div>
+        <div class="chat-list">
+          <div v-for="msg in shareDialog.messages" :key="msg.id" class="chat-item">
+            <div class="chat-meta">
+              <strong>{{ msg.sender_org_name || "机构" }}</strong>
+              <span class="chat-time">{{ formatTime(msg.created_at) }}</span>
+            </div>
+            <div class="chat-content">{{ msg.content }}</div>
+          </div>
+        </div>
+        <div class="chat-input" v-if="shareDialog.detail.status !== 'CLOSED'">
+          <el-input type="textarea" v-model="shareDialog.content" rows="2" />
+          <el-button type="primary" size="mini" :loading="shareDialog.sending" @click="sendShareMessage">
+            发送
+          </el-button>
+        </div>
+      </el-card>
     </el-dialog>
   </el-card>
 </template>
 
 <script>
-import { listRescueAnimals, createRescueAnimal, listRescueTasks, listMedicalRecords } from "@/api";
+import {
+  listRescueAnimals,
+  createRescueAnimal,
+  listRescueTasks,
+  listMedicalRecords,
+  listRescueOrganizations,
+  createCaseShare,
+  listCaseShares,
+  getCaseShare,
+  addCaseShareMessage,
+  closeCaseShare
+} from "@/api";
 
 export default {
   name: "RescueAnimals",
@@ -101,7 +192,10 @@ export default {
       tasks: [],
       show: false,
       form: { rescue_task_id: "", items: [{ name: "", species: "", summary: "" }] },
-      detail: { visible: false, item: null, records: [], loading: false },
+      detail: { visible: false, item: null, records: [], loading: false, shares: [], shareLoading: false },
+      shareTargets: [],
+      shareForm: { targetOrgId: null, note: "", loading: false },
+      shareDialog: { visible: false, detail: {}, messages: [], content: "", sending: false },
       loading: false,
       saving: false
     };
@@ -109,6 +203,7 @@ export default {
   created() {
     this.fetch();
     this.fetchTasks();
+    this.loadShareTargets();
     const taskId = this.$route.query.taskId;
     if (taskId) {
       this.show = true;
@@ -196,6 +291,91 @@ export default {
       } finally {
         this.detail.loading = false;
       }
+      this.loadShares(row.id);
+    },
+    async loadShareTargets() {
+      const resp = await listRescueOrganizations();
+      if (resp.code === 0) {
+        const orgId = this.$store.state.auth.profile.org_id;
+        this.shareTargets = (resp.data || []).filter((o) => o.id !== orgId);
+      }
+    },
+    async loadShares(animalId) {
+      this.detail.shareLoading = true;
+      try {
+        const resp = await listCaseShares();
+        if (resp.code === 0) {
+          this.detail.shares = (resp.data || []).filter((s) => s.animal_id === animalId);
+        }
+      } finally {
+        this.detail.shareLoading = false;
+      }
+    },
+    shareStatusText(status) {
+      return { ACTIVE: "共享中", CLOSED: "已结束" }[status] || status || "未知";
+    },
+    canCloseShare(share) {
+      const orgId = this.$store.state.auth.profile.org_id;
+      return share.from_org_id === orgId && share.status === "ACTIVE";
+    },
+    async submitShare() {
+      if (!this.detail.item || !this.shareForm.targetOrgId) {
+        this.$message.warning("请选择共享机构");
+        return;
+      }
+      this.shareForm.loading = true;
+      try {
+        const resp = await createCaseShare({
+          animalId: this.detail.item.id,
+          targetOrgId: this.shareForm.targetOrgId,
+          note: this.shareForm.note
+        });
+        if (resp.code === 0) {
+          this.$message.success("共享已发起");
+          this.shareForm = { targetOrgId: null, note: "", loading: false };
+          this.loadShares(this.detail.item.id);
+        } else {
+          this.$message.error(resp.message || "共享失败");
+        }
+      } finally {
+        this.shareForm.loading = false;
+      }
+    },
+    async openShare(share) {
+      const resp = await getCaseShare(share.id);
+      if (resp.code === 0) {
+        this.shareDialog.detail = resp.data || {};
+        this.shareDialog.messages = resp.data.messages || [];
+        this.shareDialog.content = "";
+        this.shareDialog.visible = true;
+      }
+    },
+    async sendShareMessage() {
+      if (!this.shareDialog.content || !this.shareDialog.detail.id) {
+        return;
+      }
+      this.shareDialog.sending = true;
+      try {
+        const resp = await addCaseShareMessage(this.shareDialog.detail.id, {
+          content: this.shareDialog.content
+        });
+        if (resp.code === 0) {
+          this.shareDialog.content = "";
+          const detailResp = await getCaseShare(this.shareDialog.detail.id);
+          if (detailResp.code === 0) {
+            this.shareDialog.messages = detailResp.data.messages || [];
+          }
+        }
+      } finally {
+        this.shareDialog.sending = false;
+      }
+    },
+    async closeShare(share) {
+      const resp = await closeCaseShare(share.id);
+      if (resp.code === 0) {
+        this.$message.success("共享已结束");
+        this.loadShares(this.detail.item.id);
+      }
     },
     recordTypeText(type) {
       return {
@@ -258,5 +438,33 @@ export default {
 }
 .nowrap {
   white-space: nowrap;
+}
+.share-form {
+  margin-bottom: 12px;
+}
+.chat-list {
+  max-height: 240px;
+  overflow-y: auto;
+  border: 1px solid #eee;
+  padding: 8px;
+  border-radius: 6px;
+}
+.chat-item + .chat-item {
+  margin-top: 8px;
+}
+.chat-meta {
+  display: flex;
+  justify-content: space-between;
+  color: #6b7280;
+  font-size: 12px;
+}
+.chat-content {
+  margin-top: 4px;
+}
+.chat-input {
+  margin-top: 10px;
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
 }
 </style>

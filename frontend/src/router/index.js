@@ -33,6 +33,7 @@ import MedicalRecords from "@/views/rescue/MedicalRecords.vue";
 import Inventory from "@/views/rescue/Inventory.vue";
 import RescueEmployees from "@/views/rescue/Employees.vue";
 import RescueVehicles from "@/views/rescue/Vehicles.vue";
+import RescueSharedCases from "@/views/rescue/SharedCases.vue";
 
 import AdminDashboard from "@/views/admin/Dashboard.vue";
 import AdminReports from "@/views/admin/Reports.vue";
@@ -80,6 +81,7 @@ const router = new Router({
         { path: "rescue/animals", component: RescueAnimals, ...roleOnly("RESCUE") },
         { path: "rescue/animals/:id/records", component: MedicalRecords, ...roleOnly("RESCUE") },
         { path: "rescue/medical-records", component: MedicalRecords, ...roleOnly("RESCUE") },
+        { path: "rescue/shared-cases", component: RescueSharedCases, ...roleOnly("RESCUE") },
         { path: "rescue/inventory", component: Inventory, ...roleOnly("RESCUE") },
         { path: "rescue/vehicles", component: RescueVehicles, ...roleOnly("RESCUE") },
         { path: "rescue/employees", component: RescueEmployees, ...roleOnly("RESCUE") },

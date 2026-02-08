@@ -73,6 +73,7 @@ export default {
           { label: "车辆管理", path: "/rescue/vehicles" },
           { label: "动物档案", path: "/rescue/animals" },
           { label: "治疗记录", path: "/rescue/medical-records" },
+          { label: "共享病例", path: "/rescue/shared-cases" },
           { label: "库存管理", path: "/rescue/inventory" },
           ...(this.isOrgAdmin ? [{ label: "员工管理", path: "/rescue/employees" }] : [])
         ],

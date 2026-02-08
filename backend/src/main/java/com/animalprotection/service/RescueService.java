@@ -183,6 +183,8 @@ public class RescueService {
             ps.setString(4, request.getSummary());
             return ps;
         }, keyHolder);
+        jdbcTemplate.update("UPDATE ap_rescue_task SET status = 'FILED', updated_at = NOW(3) WHERE id = ?",
+                request.getRescueTaskId());
         jdbcTemplate.update("INSERT INTO ap_event_timeline (event_id, node_type, content, operator_role, operator_user_id, created_at) " +
                         "VALUES ((SELECT event_id FROM ap_rescue_task WHERE id = ?), '动物建档', ?, 'RESCUE', ?, NOW(3))",
                 request.getRescueTaskId(), "已建立动物档案", userId);
@@ -228,6 +230,162 @@ public class RescueService {
                 "SELECT id, record_type, record_content, recorded_at FROM ap_medical_record WHERE animal_id = ? ORDER BY recorded_at DESC",
                 animalId
         );
+    }
+
+    public List<Map<String, Object>> rescueOrgs(Long userId) {
+        Long orgId = findOrgId(userId, true);
+        if (orgId == null) {
+            return java.util.Collections.emptyList();
+        }
+        return jdbcTemplate.queryForList(
+                "SELECT id, name FROM ap_organization WHERE org_type = 'RESCUE' AND status = 1 AND deleted_at IS NULL ORDER BY id ASC"
+        );
+    }
+
+    public Long createCaseShare(Long animalId, Long targetOrgId, String note, Long userId) {
+        Long orgId = findOrgId(userId, true);
+        if (orgId == null || animalId == null || targetOrgId == null) {
+            return null;
+        }
+        Integer count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(1) FROM ap_animal WHERE id = ? AND rescue_task_id IN (SELECT id FROM ap_rescue_task WHERE rescue_org_id = ?)",
+                Integer.class,
+                animalId,
+                orgId
+        );
+        if (count == null || count == 0) {
+            return null;
+        }
+        jdbcTemplate.update(
+                "INSERT INTO ap_case_share (animal_id, from_org_id, to_org_id, status, note, created_at, updated_at) " +
+                        "VALUES (?, ?, ?, 'ACTIVE', ?, NOW(3), NOW(3))",
+                animalId,
+                orgId,
+                targetOrgId,
+                note
+        );
+        Long shareId = jdbcTemplate.queryForObject(
+                "SELECT id FROM ap_case_share WHERE animal_id = ? AND from_org_id = ? AND to_org_id = ? ORDER BY id DESC LIMIT 1",
+                Long.class,
+                animalId,
+                orgId,
+                targetOrgId
+        );
+        String orgName = null;
+        List<Map<String, Object>> orgRows = jdbcTemplate.queryForList("SELECT name FROM ap_organization WHERE id = ?", targetOrgId);
+        if (!orgRows.isEmpty()) {
+            Object name = orgRows.get(0).get("name");
+            if (name != null) {
+                orgName = name.toString();
+            }
+        }
+        jdbcTemplate.update("INSERT INTO ap_event_timeline (event_id, node_type, content, operator_role, operator_user_id, created_at) " +
+                        "VALUES ((SELECT event_id FROM ap_rescue_task WHERE id = (SELECT rescue_task_id FROM ap_animal WHERE id = ?)), '病例共享', ?, 'RESCUE', ?, NOW(3))",
+                animalId,
+                orgName == null ? "已共享病例" : ("已共享病例至：" + orgName),
+                userId);
+        return shareId;
+    }
+
+    public List<Map<String, Object>> caseShares(Long userId, String direction) {
+        Long orgId = findOrgId(userId, true);
+        if (orgId == null) {
+            return java.util.Collections.emptyList();
+        }
+        StringBuilder sql = new StringBuilder(
+                "SELECT s.id, s.animal_id, s.from_org_id, s.to_org_id, s.status, s.note, s.created_at, s.closed_at, " +
+                        "a.name AS animal_name, a.species, " +
+                        "ofrom.name AS from_org_name, oto.name AS to_org_name " +
+                        "FROM ap_case_share s " +
+                        "LEFT JOIN ap_animal a ON s.animal_id = a.id " +
+                        "LEFT JOIN ap_organization ofrom ON s.from_org_id = ofrom.id " +
+                        "LEFT JOIN ap_organization oto ON s.to_org_id = oto.id " +
+                        "WHERE 1=1 "
+        );
+        if ("sent".equalsIgnoreCase(direction)) {
+            sql.append("AND s.from_org_id = ? ");
+        } else if ("received".equalsIgnoreCase(direction)) {
+            sql.append("AND s.to_org_id = ? ");
+        } else {
+            sql.append("AND (s.from_org_id = ? OR s.to_org_id = ?) ");
+        }
+        sql.append("ORDER BY s.created_at DESC");
+        if ("sent".equalsIgnoreCase(direction) || "received".equalsIgnoreCase(direction)) {
+            return jdbcTemplate.queryForList(sql.toString(), orgId);
+        }
+        return jdbcTemplate.queryForList(sql.toString(), orgId, orgId);
+    }
+
+    public Map<String, Object> caseShareDetail(Long shareId, Long userId) {
+        Long orgId = findOrgId(userId, true);
+        if (orgId == null) {
+            return java.util.Collections.emptyMap();
+        }
+        Map<String, Object> share = jdbcTemplate.queryForMap(
+                "SELECT s.id, s.animal_id, s.from_org_id, s.to_org_id, s.status, s.note, s.created_at, s.closed_at, " +
+                        "a.name AS animal_name, a.species, a.health_summary, " +
+                        "ofrom.name AS from_org_name, oto.name AS to_org_name " +
+                        "FROM ap_case_share s " +
+                        "LEFT JOIN ap_animal a ON s.animal_id = a.id " +
+                        "LEFT JOIN ap_organization ofrom ON s.from_org_id = ofrom.id " +
+                        "LEFT JOIN ap_organization oto ON s.to_org_id = oto.id " +
+                        "WHERE s.id = ? AND (s.from_org_id = ? OR s.to_org_id = ?)",
+                shareId,
+                orgId,
+                orgId
+        );
+        List<Map<String, Object>> records = jdbcTemplate.queryForList(
+                "SELECT id, record_type, record_content, recorded_at FROM ap_medical_record WHERE animal_id = ? ORDER BY recorded_at DESC",
+                share.get("animal_id")
+        );
+        List<Map<String, Object>> messages = jdbcTemplate.queryForList(
+                "SELECT m.id, m.sender_org_id, m.sender_user_id, m.content, m.created_at, o.name AS sender_org_name " +
+                        "FROM ap_case_share_message m LEFT JOIN ap_organization o ON m.sender_org_id = o.id " +
+                        "WHERE m.share_id = ? ORDER BY m.created_at ASC",
+                shareId
+        );
+        share.put("records", records);
+        share.put("messages", messages);
+        return share;
+    }
+
+    public void addCaseShareMessage(Long shareId, String content, Long userId) {
+        Long orgId = findOrgId(userId, true);
+        if (orgId == null) {
+            return;
+        }
+        jdbcTemplate.update(
+                "INSERT INTO ap_case_share_message (share_id, sender_org_id, sender_user_id, content, created_at) VALUES (?, ?, ?, ?, NOW(3))",
+                shareId,
+                orgId,
+                userId,
+                content
+        );
+    }
+
+    public void closeCaseShare(Long shareId, Long userId) {
+        Long orgId = findOrgId(userId, true);
+        if (orgId == null) {
+            return;
+        }
+        List<Map<String, Object>> rows = jdbcTemplate.queryForList(
+                "SELECT animal_id FROM ap_case_share WHERE id = ? AND from_org_id = ?",
+                shareId,
+                orgId
+        );
+        jdbcTemplate.update(
+                "UPDATE ap_case_share SET status = 'CLOSED', closed_at = NOW(3), updated_at = NOW(3) WHERE id = ? AND from_org_id = ?",
+                shareId,
+                orgId
+        );
+        if (!rows.isEmpty()) {
+            Object animalId = rows.get(0).get("animal_id");
+            jdbcTemplate.update("INSERT INTO ap_event_timeline (event_id, node_type, content, operator_role, operator_user_id, created_at) " +
+                            "VALUES ((SELECT event_id FROM ap_rescue_task WHERE id = (SELECT rescue_task_id FROM ap_animal WHERE id = ?)), '病例共享', ?, 'RESCUE', ?, NOW(3))",
+                    animalId,
+                    "已结束共享",
+                    userId);
+        }
     }
 
     public void shareMedicalRecord(com.animalprotection.dto.MedicalShareRequest request, Long userId) {
