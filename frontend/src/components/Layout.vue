@@ -51,6 +51,7 @@ export default {
           { label: "事件列表", path: "/public/events" },
           { label: "事件上报", path: "/public/events/new" },
           { label: "任务大厅", path: "/public/tasks" },
+          { label: "我的任务", path: "/public/my-tasks" },
           { label: "动物领养", path: "/public/adoption" },
           { label: "回访管理", path: "/public/followups" },
           { label: "公益捐助", path: "/public/donations" },
@@ -59,10 +60,12 @@ export default {
         LAW: [
           { label: "工单列表", path: "/law/workorders" },
           { label: "我的任务", path: "/law/my-tasks" },
+          { label: "志愿任务", path: "/law/volunteer-tasks" },
           { label: "归档案件", path: "/law/archives" }
         ],
         RESCUE: [
           { label: "救助任务", path: "/rescue/tasks" },
+          { label: "志愿任务", path: "/rescue/volunteer-tasks" },
           { label: "动物档案", path: "/rescue/animals" },
           { label: "治疗记录", path: "/rescue/animals/1/records" },
           { label: "库存管理", path: "/rescue/inventory" }

@@ -24,7 +24,7 @@ public class AuthService {
         String p = phone.trim();
         String pwdInput = password.trim();
         List<Map<String, Object>> list = jdbcTemplate.queryForList(
-                "SELECT id, role_code, org_id, phone, nickname, password_hash FROM ap_user WHERE phone = ? AND deleted_at IS NULL",
+                "SELECT id, role_code, org_id, phone, nickname, password_hash, is_volunteer FROM ap_user WHERE phone = ? AND deleted_at IS NULL",
                 p
         );
         if (list.isEmpty()) {
@@ -44,6 +44,7 @@ public class AuthService {
         profile.put("user_id", userId);
         profile.put("org_id", user.get("org_id"));
         profile.put("name", user.get("nickname") != null ? user.get("nickname") : user.get("phone"));
+        profile.put("is_volunteer", user.get("is_volunteer"));
         data.put("profile", profile);
         data.put("permCodes", new java.util.ArrayList<>());
         return data;

@@ -4,18 +4,22 @@ import com.animalprotection.common.ApiResponse;
 import com.animalprotection.dto.LawArchiveRequest;
 import com.animalprotection.dto.LawEvidenceRequest;
 import com.animalprotection.dto.LawResultRequest;
+import com.animalprotection.dto.VolunteerTaskCreateRequest;
 import com.animalprotection.dto.WorkOrderAcceptRequest;
 import com.animalprotection.dto.WorkOrderAssignRequest;
 import com.animalprotection.service.LawService;
+import com.animalprotection.service.PublicService;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/law")
 public class LawController {
     private final LawService lawService;
+    private final PublicService publicService;
 
-    public LawController(LawService lawService) {
+    public LawController(LawService lawService, PublicService publicService) {
         this.lawService = lawService;
+        this.publicService = publicService;
     }
 
     @GetMapping("/workorders")
@@ -84,5 +88,42 @@ public class LawController {
     @GetMapping("/archived-workorders")
     public ApiResponse<?> archived(@RequestParam(required = false) String status) {
         return ApiResponse.ok(lawService.archivedWorkOrders(status));
+    }
+
+    @GetMapping("/patrol-reports")
+    public ApiResponse<?> patrolReports(@RequestParam(required = false) String status) {
+        Long userId = com.animalprotection.common.AuthContext.getUserId();
+        return ApiResponse.ok(lawService.patrolReports(userId, status));
+    }
+
+    @GetMapping("/patrol-reports/{id}")
+    public ApiResponse<?> patrolReportDetail(@PathVariable Long id) {
+        Long userId = com.animalprotection.common.AuthContext.getUserId();
+        return ApiResponse.ok(lawService.patrolReportDetail(id, userId));
+    }
+
+    @GetMapping("/volunteer-tasks")
+    public ApiResponse<?> volunteerTasks() {
+        Long userId = com.animalprotection.common.AuthContext.getUserId();
+        return ApiResponse.ok(publicService.tasksByCreator("LAW", userId));
+    }
+
+    @GetMapping("/volunteer-tasks/{id}")
+    public ApiResponse<?> volunteerTaskDetail(@PathVariable Long id) {
+        Long userId = com.animalprotection.common.AuthContext.getUserId();
+        return ApiResponse.ok(publicService.taskDetailByCreator("LAW", userId, id));
+    }
+
+    @DeleteMapping("/volunteer-tasks/{id}")
+    public ApiResponse<?> deleteVolunteerTask(@PathVariable Long id) {
+        Long userId = com.animalprotection.common.AuthContext.getUserId();
+        publicService.deleteTaskByCreator("LAW", userId, id);
+        return ApiResponse.ok(true);
+    }
+
+    @PostMapping("/volunteer-tasks")
+    public ApiResponse<?> createVolunteerTask(@RequestBody VolunteerTaskCreateRequest request) {
+        Long userId = com.animalprotection.common.AuthContext.getUserId();
+        return ApiResponse.ok(publicService.createTask("PATROL", "LAW", userId, request));
     }
 }

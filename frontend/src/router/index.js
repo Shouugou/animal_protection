@@ -11,7 +11,9 @@ import PublicEvents from "@/views/public/Events.vue";
 import PublicEventDetail from "@/views/public/EventDetail.vue";
 import PublicEventNew from "@/views/public/EventNew.vue";
 import PublicTasks from "@/views/public/Tasks.vue";
+import PublicMyTasks from "@/views/public/MyTasks.vue";
 import PatrolSubmit from "@/views/public/PatrolSubmit.vue";
+import RescueSupportSubmit from "@/views/public/RescueSupportSubmit.vue";
 import Adoption from "@/views/public/Adoption.vue";
 import Followups from "@/views/public/Followups.vue";
 import Donations from "@/views/public/Donations.vue";
@@ -20,9 +22,11 @@ import Classroom from "@/views/public/Classroom.vue";
 import LawWorkOrders from "@/views/law/WorkOrders.vue";
 import LawWorkOrderDetail from "@/views/law/WorkOrderDetail.vue";
 import LawMyTasks from "@/views/law/MyTasks.vue";
+import LawVolunteerTasks from "@/views/law/TaskPublish.vue";
 import LawArchives from "@/views/law/ArchivedCases.vue";
 
 import RescueTasks from "@/views/rescue/Tasks.vue";
+import RescueVolunteerTasks from "@/views/rescue/TaskPublish.vue";
 import RescueAnimals from "@/views/rescue/Animals.vue";
 import MedicalRecords from "@/views/rescue/MedicalRecords.vue";
 import Inventory from "@/views/rescue/Inventory.vue";
@@ -51,7 +55,9 @@ const router = new Router({
         { path: "public/events/new", component: PublicEventNew, ...roleOnly("PUBLIC") },
         { path: "public/events/:id", component: PublicEventDetail, ...roleOnly("PUBLIC") },
         { path: "public/tasks", component: PublicTasks, ...roleOnly("PUBLIC") },
+        { path: "public/my-tasks", component: PublicMyTasks, ...roleOnly("PUBLIC") },
         { path: "public/patrol/submit/:claimId", component: PatrolSubmit, ...roleOnly("PUBLIC") },
+        { path: "public/rescue-support/submit/:claimId", component: RescueSupportSubmit, ...roleOnly("PUBLIC") },
         { path: "public/adoption", component: Adoption, ...roleOnly("PUBLIC") },
         { path: "public/followups", component: Followups, ...roleOnly("PUBLIC") },
         { path: "public/donations", component: Donations, ...roleOnly("PUBLIC") },
@@ -60,9 +66,11 @@ const router = new Router({
         { path: "law/workorders", component: LawWorkOrders, ...roleOnly("LAW") },
         { path: "law/workorders/:id", component: LawWorkOrderDetail, ...roleOnly("LAW") },
         { path: "law/my-tasks", component: LawMyTasks, ...roleOnly("LAW") },
+        { path: "law/volunteer-tasks", component: LawVolunteerTasks, ...roleOnly("LAW") },
         { path: "law/archives", component: LawArchives, ...roleOnly("LAW") },
 
         { path: "rescue/tasks", component: RescueTasks, ...roleOnly("RESCUE") },
+        { path: "rescue/volunteer-tasks", component: RescueVolunteerTasks, ...roleOnly("RESCUE") },
         { path: "rescue/animals", component: RescueAnimals, ...roleOnly("RESCUE") },
         { path: "rescue/animals/:id/records", component: MedicalRecords, ...roleOnly("RESCUE") },
         { path: "rescue/inventory", component: Inventory, ...roleOnly("RESCUE") },

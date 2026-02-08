@@ -27,7 +27,7 @@ public class RescueService {
         Long orgId = findOrgId(userId, false);
         StringBuilder sql = new StringBuilder(
                 "SELECT rt.id, rt.event_id, rt.status, rt.need_rescue, rt.dispatch_note, rt.dispatch_at, rt.arrived_at, rt.intake_at, " +
-                        "e.event_type, e.address, e.reported_at " +
+                        "e.event_type, e.address, e.latitude, e.longitude, e.reported_at " +
                         "FROM ap_rescue_task rt " +
                         "LEFT JOIN ap_event e ON rt.event_id = e.id " +
                         "WHERE rt.deleted_at IS NULL "

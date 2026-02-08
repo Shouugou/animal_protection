@@ -376,6 +376,20 @@ CREATE TABLE IF NOT EXISTS `ap_medical_record` (
   KEY `idx_mr_recorder` (`recorder_user_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='治疗记录（附件见 ap_attachment）';
 
+CREATE TABLE IF NOT EXISTS `ap_rescue_support_report` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `claim_id` BIGINT UNSIGNED NOT NULL,
+  `description` TEXT DEFAULT NULL COMMENT '救助协助详情',
+  `address` VARCHAR(255) DEFAULT NULL,
+  `latitude` DECIMAL(10,7) DEFAULT NULL,
+  `longitude` DECIMAL(10,7) DEFAULT NULL,
+  `submitted_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_rsr_claim` (`claim_id`),
+  KEY `idx_rsr_time` (`submitted_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='救助协助任务上报（附件见 ap_attachment）';
+
 CREATE TABLE IF NOT EXISTS `ap_inventory_item` (
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   `org_id` BIGINT UNSIGNED NOT NULL,
@@ -548,32 +562,82 @@ VALUES
   ('ADMIN', '系统管理员', 1);
 
 -- =========================
--- 9) 示例账号（救助医疗机构）
+-- 9) 平台初始账号（公众/执法/救助/管理员）
 -- =========================
+
+-- 组织
+INSERT INTO ap_organization (org_type, name, region_code, address, contact_name, contact_phone, status, created_at, updated_at)
+SELECT 'LAW', '东城执法队', '110101', '东城区执法路1号', '李队长', '13800000021', 1, NOW(3), NOW(3)
+WHERE NOT EXISTS (SELECT 1 FROM ap_organization WHERE org_type='LAW' AND name='东城执法队');
+
+INSERT INTO ap_organization (org_type, name, region_code, address, contact_name, contact_phone, status, created_at, updated_at)
+SELECT 'LAW', '西城执法队', '110102', '西城区执法路8号', '王队长', '13800000022', 1, NOW(3), NOW(3)
+WHERE NOT EXISTS (SELECT 1 FROM ap_organization WHERE org_type='LAW' AND name='西城执法队');
 
 INSERT INTO ap_organization (org_type, name, region_code, address, contact_name, contact_phone, status, created_at, updated_at)
 SELECT 'RESCUE', '爱心救助站', '110101', '东城区爱心路1号', '张医生', '13800000031', 1, NOW(3), NOW(3)
-WHERE NOT EXISTS (SELECT 1 FROM ap_organization WHERE org_type = 'RESCUE' AND name = '爱心救助站');
+WHERE NOT EXISTS (SELECT 1 FROM ap_organization WHERE org_type='RESCUE' AND name='爱心救助站');
 
 INSERT INTO ap_organization (org_type, name, region_code, address, contact_name, contact_phone, status, created_at, updated_at)
 SELECT 'RESCUE', '城市动物医院', '110102', '西城区健康街8号', '李主任', '13800000032', 1, NOW(3), NOW(3)
-WHERE NOT EXISTS (SELECT 1 FROM ap_organization WHERE org_type = 'RESCUE' AND name = '城市动物医院');
+WHERE NOT EXISTS (SELECT 1 FROM ap_organization WHERE org_type='RESCUE' AND name='城市动物医院');
 
 INSERT INTO ap_organization (org_type, name, region_code, address, contact_name, contact_phone, status, created_at, updated_at)
 SELECT 'RESCUE', '护佑动物中心', '110105', '朝阳区公益路18号', '王老师', '13800000033', 1, NOW(3), NOW(3)
-WHERE NOT EXISTS (SELECT 1 FROM ap_organization WHERE org_type = 'RESCUE' AND name = '护佑动物中心');
+WHERE NOT EXISTS (SELECT 1 FROM ap_organization WHERE org_type='RESCUE' AND name='护佑动物中心');
+
+INSERT INTO ap_organization (org_type, name, region_code, address, contact_name, contact_phone, status, created_at, updated_at)
+SELECT 'PLATFORM', '平台管理中心', '000000', '平台大道1号', '系统管理员', '13800000040', 1, NOW(3), NOW(3)
+WHERE NOT EXISTS (SELECT 1 FROM ap_organization WHERE org_type='PLATFORM' AND name='平台管理中心');
+
+-- 公众用户（含志愿者）
+INSERT INTO ap_user (role_code, org_id, phone, password_hash, nickname, is_volunteer, status, created_at, updated_at)
+SELECT 'PUBLIC', NULL, '13800000001', '123456', '公众用户A(志愿者)', 1, 1, NOW(3), NOW(3)
+WHERE NOT EXISTS (SELECT 1 FROM ap_user WHERE phone='13800000001');
+
+INSERT INTO ap_user (role_code, org_id, phone, password_hash, nickname, is_volunteer, status, created_at, updated_at)
+SELECT 'PUBLIC', NULL, '13800000011', '123456', '公众用户B', 0, 1, NOW(3), NOW(3)
+WHERE NOT EXISTS (SELECT 1 FROM ap_user WHERE phone='13800000011');
+
+-- 执法账号
+INSERT INTO ap_user (role_code, org_id, phone, password_hash, nickname, status, created_at, updated_at)
+SELECT 'LAW', o.id, '13800000002', '123456', '东城执法队账号', 1, NOW(3), NOW(3)
+FROM ap_organization o WHERE o.org_type='LAW' AND o.name='东城执法队'
+AND NOT EXISTS (SELECT 1 FROM ap_user WHERE phone='13800000002');
 
 INSERT INTO ap_user (role_code, org_id, phone, password_hash, nickname, status, created_at, updated_at)
+SELECT 'LAW', o.id, '13800000005', '123456', '执法人员A', 1, NOW(3), NOW(3)
+FROM ap_organization o WHERE o.org_type='LAW' AND o.name='东城执法队'
+AND NOT EXISTS (SELECT 1 FROM ap_user WHERE phone='13800000005');
+
+INSERT INTO ap_user (role_code, org_id, phone, password_hash, nickname, status, created_at, updated_at)
+SELECT 'LAW', o.id, '13800000006', '123456', '执法人员B', 1, NOW(3), NOW(3)
+FROM ap_organization o WHERE o.org_type='LAW' AND o.name='西城执法队'
+AND NOT EXISTS (SELECT 1 FROM ap_user WHERE phone='13800000006');
+
+INSERT INTO ap_user (role_code, org_id, phone, password_hash, nickname, status, created_at, updated_at)
+SELECT 'LAW', o.id, '13800000007', '123456', '执法人员C', 1, NOW(3), NOW(3)
+FROM ap_organization o WHERE o.org_type='LAW' AND o.name='西城执法队'
+AND NOT EXISTS (SELECT 1 FROM ap_user WHERE phone='13800000007');
+
+-- 救助机构账号
+INSERT INTO ap_user (role_code, org_id, phone, password_hash, nickname, status, created_at, updated_at)
 SELECT 'RESCUE', o.id, '13800000031', '123456', '爱心救助站账号', 1, NOW(3), NOW(3)
-FROM ap_organization o WHERE o.org_type = 'RESCUE' AND o.name = '爱心救助站'
-AND NOT EXISTS (SELECT 1 FROM ap_user WHERE phone = '13800000031');
+FROM ap_organization o WHERE o.org_type='RESCUE' AND o.name='爱心救助站'
+AND NOT EXISTS (SELECT 1 FROM ap_user WHERE phone='13800000031');
 
 INSERT INTO ap_user (role_code, org_id, phone, password_hash, nickname, status, created_at, updated_at)
 SELECT 'RESCUE', o.id, '13800000032', '123456', '城市动物医院账号', 1, NOW(3), NOW(3)
-FROM ap_organization o WHERE o.org_type = 'RESCUE' AND o.name = '城市动物医院'
-AND NOT EXISTS (SELECT 1 FROM ap_user WHERE phone = '13800000032');
+FROM ap_organization o WHERE o.org_type='RESCUE' AND o.name='城市动物医院'
+AND NOT EXISTS (SELECT 1 FROM ap_user WHERE phone='13800000032');
 
 INSERT INTO ap_user (role_code, org_id, phone, password_hash, nickname, status, created_at, updated_at)
 SELECT 'RESCUE', o.id, '13800000033', '123456', '护佑动物中心账号', 1, NOW(3), NOW(3)
-FROM ap_organization o WHERE o.org_type = 'RESCUE' AND o.name = '护佑动物中心'
-AND NOT EXISTS (SELECT 1 FROM ap_user WHERE phone = '13800000033');
+FROM ap_organization o WHERE o.org_type='RESCUE' AND o.name='护佑动物中心'
+AND NOT EXISTS (SELECT 1 FROM ap_user WHERE phone='13800000033');
+
+-- 管理员账号
+INSERT INTO ap_user (role_code, org_id, phone, password_hash, nickname, status, created_at, updated_at)
+SELECT 'ADMIN', o.id, '13800000004', '123456', '系统管理员', 1, NOW(3), NOW(3)
+FROM ap_organization o WHERE o.org_type='PLATFORM' AND o.name='平台管理中心'
+AND NOT EXISTS (SELECT 1 FROM ap_user WHERE phone='13800000004');

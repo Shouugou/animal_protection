@@ -287,6 +287,52 @@ public class LawService {
         return jdbcTemplate.queryForList(sql.toString());
     }
 
+    public List<Map<String, Object>> patrolReports(Long userId, String status) {
+        StringBuilder sql = new StringBuilder(
+                "SELECT c.id AS claim_id, c.status AS claim_status, c.claimed_at, c.finished_at, " +
+                        "t.id AS task_id, t.title, t.task_type, " +
+                        "u.id AS volunteer_user_id, COALESCE(u.nickname, u.phone) AS volunteer_name, " +
+                        "r.id AS report_id, r.summary, r.distance_km, r.duration_sec, r.submitted_at " +
+                        "FROM ap_task_claim c " +
+                        "JOIN ap_task t ON c.task_id = t.id " +
+                        "LEFT JOIN ap_patrol_report r ON r.claim_id = c.id " +
+                        "LEFT JOIN ap_user u ON c.user_id = u.id " +
+                        "WHERE t.creator_role = 'LAW' AND t.creator_user_id = ? AND t.task_type = 'PATROL' "
+        );
+        if ("FINISHED".equalsIgnoreCase(status)) {
+            sql.append("AND c.status = 'FINISHED' ");
+        } else if ("UNFINISHED".equalsIgnoreCase(status)) {
+            sql.append("AND c.status <> 'FINISHED' ");
+        }
+        sql.append("ORDER BY c.claimed_at DESC");
+        return jdbcTemplate.queryForList(sql.toString(), userId);
+    }
+
+    public Map<String, Object> patrolReportDetail(Long reportId, Long userId) {
+        Map<String, Object> report = jdbcTemplate.queryForMap(
+                "SELECT r.id, r.claim_id, r.summary, r.distance_km, r.duration_sec, r.submitted_at, " +
+                        "t.id AS task_id, t.title, t.task_type, " +
+                        "u.id AS volunteer_user_id, COALESCE(u.nickname, u.phone) AS volunteer_name " +
+                        "FROM ap_patrol_report r " +
+                        "JOIN ap_task_claim c ON r.claim_id = c.id " +
+                        "JOIN ap_task t ON c.task_id = t.id " +
+                        "LEFT JOIN ap_user u ON c.user_id = u.id " +
+                        "WHERE r.id = ? AND t.creator_role = 'LAW' AND t.creator_user_id = ?",
+                reportId, userId
+        );
+        List<Map<String, Object>> trackPoints = jdbcTemplate.queryForList(
+                "SELECT seq_no, latitude, longitude, point_time FROM ap_patrol_track_point WHERE report_id = ? ORDER BY seq_no ASC",
+                reportId
+        );
+        List<Map<String, Object>> riskPoints = jdbcTemplate.queryForList(
+                "SELECT risk_type, description, address, latitude, longitude, found_at FROM ap_risk_point WHERE report_id = ? ORDER BY found_at DESC",
+                reportId
+        );
+        report.put("track_points", trackPoints);
+        report.put("risk_points", riskPoints);
+        return report;
+    }
+
     private void saveEvidenceAttachments(Long evidenceId, List<String> urls, Long uploaderUserId) {
         if (urls == null || urls.isEmpty()) {
             return;

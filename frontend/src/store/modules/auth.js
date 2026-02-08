@@ -17,6 +17,9 @@ const mutations = {
     state.profile = payload.profile;
     state.permCodes = payload.permCodes || [];
   },
+  SET_PROFILE(state, profile) {
+    state.profile = { ...state.profile, ...profile };
+  },
   CLEAR_AUTH(state) {
     state.token = "";
     state.profile = { role_code: "PUBLIC", user_id: 0, org_id: null, name: "" };
@@ -45,6 +48,11 @@ const actions = {
     const payload = resp.data;
     localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
     commit("SET_AUTH", payload);
+  },
+  updateProfile({ commit, state }, profile) {
+    const next = { ...state, profile: { ...state.profile, ...profile } };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    commit("SET_PROFILE", profile);
   },
   logout({ commit }) {
     localStorage.removeItem(STORAGE_KEY);

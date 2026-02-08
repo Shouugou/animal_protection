@@ -25,7 +25,7 @@
           <span style="white-space:nowrap">{{ formatTime(scope.row.reported_at) }}</span>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="260">
+      <el-table-column label="操作" width="320">
         <template slot-scope="scope">
           <el-button
             v-if="scope.row.status === 'NEW'"
@@ -44,6 +44,11 @@
             type="primary"
             @click="dispatch(scope.row)"
           >调度</el-button>
+          <el-button
+            v-if="scope.row.status === 'DISPATCHING'"
+            size="mini"
+            @click="openVolunteer(scope.row)"
+          >发布志愿任务</el-button>
           <el-link type="primary" style="margin-left:8px" @click="openDetail(scope.row)">详情</el-link>
         </template>
       </el-table-column>
@@ -88,6 +93,39 @@
       </span>
     </el-dialog>
 
+    <el-dialog title="发布救助协助志愿任务" :visible.sync="showVolunteer" width="560px">
+      <el-form label-width="100px">
+        <el-form-item label="任务标题">
+          <el-input v-model="volunteerForm.title" />
+        </el-form-item>
+        <el-form-item label="任务描述">
+          <el-input type="textarea" v-model="volunteerForm.description" rows="3" />
+        </el-form-item>
+        <el-form-item label="地址">
+          <el-input v-model="volunteerForm.address" />
+        </el-form-item>
+        <el-form-item label="纬度">
+          <el-input v-model="volunteerForm.latitude" />
+        </el-form-item>
+        <el-form-item label="经度">
+          <el-input v-model="volunteerForm.longitude" />
+        </el-form-item>
+        <el-form-item label="开始时间">
+          <el-date-picker v-model="volunteerForm.start_at" type="datetime" value-format="yyyy-MM-dd HH:mm:ss" />
+        </el-form-item>
+        <el-form-item label="结束时间">
+          <el-date-picker v-model="volunteerForm.end_at" type="datetime" value-format="yyyy-MM-dd HH:mm:ss" />
+        </el-form-item>
+        <el-form-item label="认领人数">
+          <el-input v-model="volunteerForm.max_claims" />
+        </el-form-item>
+      </el-form>
+      <span slot="footer">
+        <el-button @click="showVolunteer=false">取消</el-button>
+        <el-button type="primary" :loading="saving" @click="submitVolunteer">发布</el-button>
+      </span>
+    </el-dialog>
+
     <el-dialog title="事件详情" :visible.sync="detailDialog.visible" width="860px">
       <el-card v-if="detail.id" style="margin-bottom:12px">
         <div slot="header">事件信息</div>
@@ -129,7 +167,7 @@
 </template>
 
 <script>
-import { listRescueTasks, grabRescueTask, evaluateRescueTask, dispatchRescueTask, getEvent } from "@/api";
+import { listRescueTasks, grabRescueTask, evaluateRescueTask, dispatchRescueTask, getEvent, createRescueVolunteerTask } from "@/api";
 import MapViewer from "@/components/MapViewer.vue";
 
 export default {
@@ -143,11 +181,22 @@ export default {
       activeTab: "ALL",
       showEval: false,
       showDispatch: false,
+      showVolunteer: false,
       currentId: null,
       detailDialog: { visible: false },
       detail: {},
       evalForm: { need_rescue: true, note: "" },
-      dispatchForm: { note: "", start: "", arrive: "", intake: "" }
+      dispatchForm: { note: "", start: "", arrive: "", intake: "" },
+      volunteerForm: {
+        title: "",
+        description: "",
+        address: "",
+        latitude: "",
+        longitude: "",
+        start_at: "",
+        end_at: "",
+        max_claims: ""
+      }
     };
   },
   computed: {
@@ -236,6 +285,20 @@ export default {
       this.dispatchForm = { note: "", start: "", arrive: "", intake: "" };
       this.showDispatch = true;
     },
+    openVolunteer(row) {
+      const title = `救助协助-${row.event_type || "事件"}-${row.event_id}`;
+      this.volunteerForm = {
+        title,
+        description: "协助救助现场处理与物资搬运等",
+        address: row.address || "",
+        latitude: row.latitude || "",
+        longitude: row.longitude || "",
+        start_at: "",
+        end_at: "",
+        max_claims: 1
+      };
+      this.showVolunteer = true;
+    },
     async saveEval() {
       this.saving = true;
       try {
@@ -265,6 +328,33 @@ export default {
           this.$message.success("调度已保存");
           this.showDispatch = false;
           this.fetch();
+        }
+      } finally {
+        this.saving = false;
+      }
+    },
+    async submitVolunteer() {
+      if (!this.volunteerForm.title) {
+        this.$message.warning("请填写任务标题");
+        return;
+      }
+      this.saving = true;
+      try {
+        const resp = await createRescueVolunteerTask({
+          title: this.volunteerForm.title,
+          description: this.volunteerForm.description,
+          address: this.volunteerForm.address,
+          latitude: this.volunteerForm.latitude ? Number(this.volunteerForm.latitude) : null,
+          longitude: this.volunteerForm.longitude ? Number(this.volunteerForm.longitude) : null,
+          startAt: this.volunteerForm.start_at,
+          endAt: this.volunteerForm.end_at,
+          maxClaims: this.volunteerForm.max_claims ? Number(this.volunteerForm.max_claims) : 1
+        });
+        if (resp.code === 0) {
+          this.$message.success("已发布志愿任务");
+          this.showVolunteer = false;
+        } else {
+          this.$message.error(resp.message || "发布失败");
         }
       } finally {
         this.saving = false;

@@ -63,6 +63,7 @@ public class PatrolReportRequest {
         private Double latitude;
         private Double longitude;
         private String pointTime;
+        private String address;
 
         public Integer getSeqNo() {
             return seqNo;
@@ -94,6 +95,14 @@ public class PatrolReportRequest {
 
         public void setPointTime(String pointTime) {
             this.pointTime = pointTime;
+        }
+
+        public String getAddress() {
+            return address;
+        }
+
+        public void setAddress(String address) {
+            this.address = address;
         }
     }
 

@@ -27,7 +27,31 @@ public class PublicController {
     @PostMapping("/tasks/{id}/claim")
     public ApiResponse<?> claim(@PathVariable Long id) {
         Long userId = com.animalprotection.common.AuthContext.getUserId();
-        return ApiResponse.ok(publicService.claimTask(id, userId));
+        java.util.Map<String, Object> result = publicService.claimTask(id, userId);
+        Object ok = result.get("ok");
+        if (ok instanceof Boolean && !(Boolean) ok) {
+            return ApiResponse.error(result.get("message") == null ? "认领失败" : result.get("message").toString());
+        }
+        return ApiResponse.ok(result.get("claimId"));
+    }
+
+    @PostMapping("/volunteer/register")
+    public ApiResponse<?> registerVolunteer() {
+        Long userId = com.animalprotection.common.AuthContext.getUserId();
+        publicService.registerVolunteer(userId);
+        return ApiResponse.ok(true);
+    }
+
+    @GetMapping("/task-claims")
+    public ApiResponse<?> myTaskClaims() {
+        Long userId = com.animalprotection.common.AuthContext.getUserId();
+        return ApiResponse.ok(publicService.myTaskClaims(userId));
+    }
+
+    @GetMapping("/task-claims/{id}")
+    public ApiResponse<?> myTaskClaimDetail(@PathVariable Long id) {
+        Long userId = com.animalprotection.common.AuthContext.getUserId();
+        return ApiResponse.ok(publicService.myTaskClaimDetail(id, userId));
     }
 
     @PostMapping("/task-claims/{id}/start")
@@ -39,6 +63,12 @@ public class PublicController {
     @PostMapping("/patrol-reports")
     public ApiResponse<?> patrolReports(@RequestBody PatrolReportRequest request) {
         return ApiResponse.ok(publicService.createPatrolReport(request));
+    }
+
+    @PostMapping("/rescue-support-reports")
+    public ApiResponse<?> rescueSupportReports(@RequestBody RescueSupportReportRequest request) {
+        Long userId = com.animalprotection.common.AuthContext.getUserId();
+        return ApiResponse.ok(publicService.createRescueSupportReport(request, userId));
     }
 
     @GetMapping("/animals")
